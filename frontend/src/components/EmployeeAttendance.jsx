@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Clock, Calendar, AlertCircle } from "lucide-react";
+import { Clock, Calendar, AlertCircle, Umbrella } from "lucide-react";
 import { AlertModal, ConfirmModal } from "./Modals";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -7,7 +7,8 @@ const API_URL = import.meta.env.VITE_API_URL;
 const EmployeeAttendance = () => {
   const [records, setRecords] = useState([]);
   const [todayStatus, setTodayStatus] = useState("not_checked_in");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isOnLeave, setIsOnLeave] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [alertModal, setAlertModal] = useState({
     isOpen: false,
     title: "",
@@ -18,41 +19,76 @@ const EmployeeAttendance = () => {
     action: "",
   });
 
-  const fetchAttendance = async () => {
+  const fetchStatusAndData = async () => {
+    setIsLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/attendance/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const today = new Date();
+
+      const [attRes, leaveRes] = await Promise.all([
+        fetch(`${API_URL}/attendance/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_URL}/leaves/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      let currentlyOnLeave = false;
+
+      if (leaveRes.ok) {
+        const leaves = await leaveRes.json();
+        const activeLeave = leaves.find((l) => {
+          const start = new Date(l.startDate);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(l.endDate);
+          end.setHours(23, 59, 59, 999);
+          return l.status === "Approved" && today >= start && today <= end;
+        });
+
+        if (activeLeave) {
+          currentlyOnLeave = true;
+          setIsOnLeave(true);
+          setTodayStatus("on_leave");
+        } else {
+          setIsOnLeave(false);
+        }
+      }
+
+      if (attRes.ok) {
+        const data = await attRes.json();
         setRecords(data);
 
-        const today = new Date().toDateString();
-        const todayRecord = data.find(
-          (record) => new Date(record.date).toDateString() === today,
-        );
+        if (!currentlyOnLeave) {
+          const todayStr = new Date().toDateString();
+          const todayRecord = data.find(
+            (record) => new Date(record.date).toDateString() === todayStr,
+          );
 
-        if (todayRecord) {
-          if (todayRecord.checkOutTime) {
-            setTodayStatus("completed");
+          if (todayRecord) {
+            if (todayRecord.checkOutTime) {
+              setTodayStatus("completed");
+            } else {
+              setTodayStatus("checked_in");
+            }
           } else {
-            setTodayStatus("checked_in");
+            setTodayStatus("not_checked_in");
           }
-        } else {
-          setTodayStatus("not_checked_in");
         }
       }
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAttendance();
+    fetchStatusAndData();
   }, []);
 
   const initiateAttendanceMarking = () => {
+    if (todayStatus === "on_leave") return;
     const action = todayStatus === "not_checked_in" ? "Clock In" : "Clock Out";
     setConfirmModal({ isOpen: true, action });
   };
@@ -69,11 +105,11 @@ const EmployeeAttendance = () => {
       const data = await res.json();
 
       if (res.ok) {
-        fetchAttendance();
+        fetchStatusAndData();
       } else {
         setAlertModal({
           isOpen: true,
-          title: "Error",
+          title: "Action Blocked",
           message: data.message || "Failed to mark attendance",
         });
       }
@@ -136,7 +172,7 @@ const EmployeeAttendance = () => {
           <p className="text-sm text-zinc-500">Record your daily work hours.</p>
         </div>
 
-        <div className="flex items-center gap-4 bg-white px-4 py-3 rounded-md border border-zinc-200">
+        <div className="flex flex-col sm:flex-row items-center gap-4 bg-white px-4 py-3 rounded-md border border-zinc-200">
           <div className="flex items-center gap-2 text-sm font-medium text-black">
             <Clock size={16} className="text-zinc-400" />
             {new Date().toLocaleDateString([], {
@@ -145,26 +181,35 @@ const EmployeeAttendance = () => {
               day: "numeric",
             })}
           </div>
-          <div className="w-px h-6 bg-zinc-200"></div>
-          <button
-            onClick={initiateAttendanceMarking}
-            disabled={isLoading || todayStatus === "completed"}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-              todayStatus === "not_checked_in"
-                ? "bg-black text-white hover:bg-zinc-800"
-                : todayStatus === "checked_in"
-                  ? "bg-red-600 text-white hover:bg-red-700"
-                  : "bg-zinc-100 text-zinc-400 cursor-not-allowed"
-            }`}
-          >
-            {isLoading
-              ? "Processing..."
-              : todayStatus === "not_checked_in"
-                ? "Clock In"
-                : todayStatus === "checked_in"
-                  ? "Clock Out"
-                  : "Day Completed"}
-          </button>
+          <div className="hidden sm:block w-px h-6 bg-zinc-200"></div>
+
+          {todayStatus === "on_leave" ? (
+            <div className="flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-md bg-zinc-100 text-zinc-600 border border-zinc-200">
+              <Umbrella size={14} /> Out on Leave
+            </div>
+          ) : (
+            <button
+              onClick={initiateAttendanceMarking}
+              disabled={isLoading || todayStatus === "completed"}
+              className={`w-full sm:w-auto px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                isLoading
+                  ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                  : todayStatus === "not_checked_in"
+                    ? "bg-black text-white hover:bg-zinc-800"
+                    : todayStatus === "checked_in"
+                      ? "bg-red-600 text-white hover:bg-red-700"
+                      : "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+              }`}
+            >
+              {isLoading
+                ? "Processing..."
+                : todayStatus === "not_checked_in"
+                  ? "Clock In"
+                  : todayStatus === "checked_in"
+                    ? "Clock Out"
+                    : "Day Completed"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -209,10 +254,10 @@ const EmployeeAttendance = () => {
                   </td>
                   <td className="px-6 py-4">
                     <span
-                      className={`px-2 py-1 text-xs font-medium rounded-md ${
+                      className={`px-2 py-1 text-xs font-medium rounded-md border ${
                         record.status === "Present"
-                          ? "bg-zinc-100 text-black border border-zinc-200"
-                          : "bg-zinc-100 text-zinc-600"
+                          ? "bg-zinc-50 text-black border-zinc-200"
+                          : "bg-zinc-100 text-zinc-600 border-zinc-200"
                       }`}
                     >
                       {record.status}
@@ -220,7 +265,7 @@ const EmployeeAttendance = () => {
                   </td>
                 </tr>
               ))}
-              {records.length === 0 && (
+              {records.length === 0 && !isLoading && (
                 <tr>
                   <td
                     colSpan="4"

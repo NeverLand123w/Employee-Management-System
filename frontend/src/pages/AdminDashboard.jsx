@@ -49,6 +49,12 @@ const AdminDashboard = () => {
     message: "",
   });
 
+  const [activeChartLines, setActiveChartLines] = useState({
+    Activity: true,
+    Hires: true,
+    Leaves: true,
+  });
+
   const userString = localStorage.getItem("user");
   const user = userString ? JSON.parse(userString) : null;
 
@@ -254,6 +260,24 @@ const AdminDashboard = () => {
     navigate("/");
   };
 
+  const toggleChartLine = (key) => {
+    setActiveChartLines((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const graphLegendItems = [
+    {
+      key: "Activity",
+      name: "Daily Activity",
+      color: "#71717a",
+      dashed: false,
+    },
+    { key: "Hires", name: "New Hires", color: "#000000", dashed: false },
+    { key: "Leaves", name: "Leave Requests", color: "#d4d4d8", dashed: true },
+  ];
+
   return (
     <div className="flex h-screen bg-[#fafafa] font-sans text-zinc-950">
       <ConfirmModal
@@ -371,15 +395,27 @@ const AdminDashboard = () => {
             </h1>
           </div>
 
+          <div
+            className={`flex items-center relative ${activeTab === "overview" ? "opacity-0 pointer-events-none" : ""}`}
+          >
+            <Search size={14} className="text-zinc-400 absolute left-3" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-zinc-50 border border-zinc-200 rounded-full pl-9 pr-4 py-1.5 text-sm text-black placeholder-zinc-400 focus:outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:bg-white transition-all w-64"
+            />
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-6 md:p-10 bg-[#fafafa]">
           {activeTab === "overview" && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 max-w-6xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 mx-auto">
                 <div
                   onClick={() => handleTabChange("directory")}
-                  className="bg-white p-5 rounded-xl border border-zinc-200 cursor-pointer hover:border-black transition-colors group shadow-sm"
+                  className="bg-white p-5 rounded-md border border-zinc-200 cursor-pointer hover:border-black transition-colors group shadow-sm"
                 >
                   <p className="text-sm text-zinc-500 font-medium mb-2 group-hover:text-black transition-colors">
                     Total Headcount
@@ -388,7 +424,7 @@ const AdminDashboard = () => {
                     {stats.headcount}
                   </h3>
                 </div>
-                <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm">
+                <div className="bg-white p-5 rounded-md border border-zinc-200 shadow-sm">
                   <p className="text-sm text-zinc-500 font-medium mb-2">
                     Active Departments
                   </p>
@@ -398,7 +434,7 @@ const AdminDashboard = () => {
                 </div>
                 <div
                   onClick={() => handleTabChange("leaves")}
-                  className="bg-white p-5 rounded-xl border border-zinc-200 flex justify-between items-start cursor-pointer hover:border-black transition-colors group shadow-sm"
+                  className="bg-white p-5 rounded-md border border-zinc-200 flex justify-between items-start cursor-pointer hover:border-black transition-colors group shadow-sm"
                 >
                   <div>
                     <p className="text-sm text-zinc-500 font-medium mb-2 group-hover:text-black transition-colors">
@@ -416,12 +452,12 @@ const AdminDashboard = () => {
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-xl border border-zinc-200 max-w-6xl mx-auto shadow-sm">
+              <div className="bg-white p-6 rounded-md border border-zinc-200 mx-auto shadow-sm">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
                   <h2 className="text-sm font-semibold text-black uppercase tracking-widest">
                     Platform Analytics
                   </h2>
-                  <div className="flex bg-zinc-100 p-1 rounded-lg border border-zinc-200">
+                  <div className="flex bg-zinc-100 p-1 rounded-md border border-zinc-200">
                     {["7 Days", "30 Days", "6 Months", "All Time"].map(
                       (opt) => (
                         <button
@@ -435,11 +471,12 @@ const AdminDashboard = () => {
                     )}
                   </div>
                 </div>
-                <div className="h-80 w-full">
+
+                <div className="h-[280px] w-full mb-2">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
                       data={chartData}
-                      margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                     >
                       <CartesianGrid
                         strokeDasharray="3 3"
@@ -451,7 +488,7 @@ const AdminDashboard = () => {
                         axisLine={false}
                         tickLine={false}
                         tick={{ fill: "#71717a", fontSize: 12 }}
-                        dy={15}
+                        dy={10}
                       />
                       <YAxis
                         axisLine={false}
@@ -470,7 +507,9 @@ const AdminDashboard = () => {
                         itemStyle={{ color: "#fff" }}
                         cursor={{ stroke: "#d4d4d8", strokeWidth: 1 }}
                       />
+
                       <Line
+                        hide={!activeChartLines.Activity}
                         type="monotone"
                         name="Daily Activity"
                         dataKey="Activity"
@@ -480,6 +519,7 @@ const AdminDashboard = () => {
                         activeDot={{ r: 5 }}
                       />
                       <Line
+                        hide={!activeChartLines.Hires}
                         type="linear"
                         name="New Hires"
                         dataKey="Hires"
@@ -489,6 +529,7 @@ const AdminDashboard = () => {
                         activeDot={{ r: 5 }}
                       />
                       <Line
+                        hide={!activeChartLines.Leaves}
                         type="linear"
                         name="Leave Requests"
                         dataKey="Leaves"
@@ -500,6 +541,43 @@ const AdminDashboard = () => {
                       />
                     </LineChart>
                   </ResponsiveContainer>
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-4 sm:gap-8 pt-6 border-t border-zinc-100">
+                  {graphLegendItems.map((item) => {
+                    const isActive = activeChartLines[item.key];
+                    return (
+                      <button
+                        key={item.key}
+                        onClick={() => toggleChartLine(item.key)}
+                        className={`flex items-center gap-2.5 px-3 py-1.5 rounded-md transition-all duration-200 ${isActive ? "bg-zinc-50 shadow-sm ring-1 ring-zinc-200/50" : "opacity-40 grayscale hover:opacity-100"}`}
+                      >
+                        {item.dashed ? (
+                          <svg width="16" height="2" viewBox="0 0 16 2">
+                            <line
+                              x1="0"
+                              y1="1"
+                              x2="16"
+                              y2="1"
+                              stroke={item.color}
+                              strokeWidth="2"
+                              strokeDasharray="4 3"
+                            />
+                          </svg>
+                        ) : (
+                          <div
+                            className="w-4 h-0.5 rounded-full"
+                            style={{ backgroundColor: item.color }}
+                          ></div>
+                        )}
+                        <span
+                          className={`text-xs font-semibold uppercase tracking-wider ${isActive ? "text-zinc-800" : "text-zinc-500"}`}
+                        >
+                          {item.name}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </>

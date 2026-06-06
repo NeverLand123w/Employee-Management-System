@@ -14,10 +14,17 @@ const leaveSchema = new mongoose.Schema(
     },
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
+    isHalfDay: { type: Boolean, default: false },
     reason: { type: String, required: true },
     status: {
       type: String,
-      enum: ["Pending", "Approved", "Rejected"],
+      enum: [
+        "Pending",
+        "Approved",
+        "Rejected",
+        "Cancel Requested",
+        "Cancelled",
+      ],
       default: "Pending",
     },
   },

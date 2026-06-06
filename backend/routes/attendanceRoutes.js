@@ -1,5 +1,6 @@
 const express = require("express");
 const Attendance = require("../models/Attendance");
+const Leave = require("../models/Leave");
 const { protect, admin } = require("../middleware/authMiddleware");
 const router = express.Router();
 
@@ -7,13 +8,28 @@ router.post("/mark", protect, async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+    const overlappingLeave = await Leave.findOne({
+      employeeId: req.user._id,
+      status: "Approved",
+      isHalfDay: false,
+      startDate: { $lte: endOfDay },
+      endDate: { $gte: today },
+    });
+
+    if (overlappingLeave) {
+      return res
+        .status(403)
+        .json({
+          message:
+            "Action Blocked: You are currently scheduled on a Full-Day Approved Leave. Contact Administration to revoke the leave before you can clock in.",
+        });
+    }
 
     let attendance = await Attendance.findOne({
       employeeId: req.user._id,
-      date: {
-        $gte: today,
-        $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000),
-      },
+      date: { $gte: today, $lt: endOfDay },
     });
 
     if (attendance) {

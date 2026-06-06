@@ -5,6 +5,7 @@ import {
   User,
   LogOut,
   Menu,
+  Bell,
   X,
   Clock,
   CalendarDays,
@@ -232,17 +233,32 @@ const EmployeeDashboard = () => {
     navigate("/");
   };
 
-  const calculateDays = (start, end) =>
-    Math.ceil(
-      Math.abs(new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24),
-    ) + 1;
+  const calculateDays = (start, end, isHalfDay) => {
+    if (isHalfDay) return 0.5;
+    let count = 0;
+    let curDate = new Date(start);
+    const endDate = new Date(end);
+
+    while (curDate <= endDate) {
+      const dayOfWeek = curDate.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) count++;
+      curDate.setDate(curDate.getDate() + 1);
+    }
+    return count;
+  };
 
   const usedLeaves = overviewData.leaves
     .filter((l) => l.status === "Approved")
-    .reduce((acc, l) => acc + calculateDays(l.startDate, l.endDate), 0);
+    .reduce(
+      (acc, l) => acc + calculateDays(l.startDate, l.endDate, l.isHalfDay),
+      0,
+    );
   const pendingLeaves = overviewData.leaves
     .filter((l) => l.status === "Pending")
-    .reduce((acc, l) => acc + calculateDays(l.startDate, l.endDate), 0);
+    .reduce(
+      (acc, l) => acc + calculateDays(l.startDate, l.endDate, l.isHalfDay),
+      0,
+    );
   const availableLeaves = TOTAL_LEAVE_ALLOWANCE - usedLeaves;
 
   const pieData = [
@@ -329,6 +345,15 @@ const EmployeeDashboard = () => {
               <CalendarDays size={16} strokeWidth={1.5} /> Leave Requests
             </button>
 
+            <div className="px-2 mt-6 mb-3 text-xs font-semibold text-zinc-400 uppercase tracking-widest">
+              Personal Info
+            </div>
+            <button
+              onClick={() => handleTabChange("profile")}
+              className={`flex items-center gap-3 w-full px-2 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === "profile" ? "bg-white text-black shadow-sm border border-zinc-200/60" : "text-zinc-600 hover:text-black hover:bg-white hover:shadow-sm hover:border-zinc-200/60 border border-transparent"}`}
+            >
+              <FileText size={16} strokeWidth={1.5} /> Profile Details
+            </button>
           </nav>
         </div>
 
@@ -387,7 +412,16 @@ const EmployeeDashboard = () => {
 
         <div className="flex-1 overflow-y-auto p-6 md:p-10 bg-[#fafafa]">
           {activeTab === "overview" && (
-            <div className="max-w-6xl mx-auto">
+            <div className="mx-auto">
+              <div className="mb-8">
+                <h1 className="text-2xl font-semibold text-black tracking-tight mb-2">
+                  Welcome back, {userProfile.name.split(" ")[0]}
+                </h1>
+                <p className="text-zinc-500 text-sm">
+                  Here is your operational summary and recent activity.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <div
                   onClick={() => handleTabChange("attendance")}
@@ -397,7 +431,6 @@ const EmployeeDashboard = () => {
                     <p className="text-sm text-zinc-500 font-medium group-hover:text-black transition-colors">
                       Days Present
                     </p>
-                    <CheckCircle2 size={16} className="text-zinc-400" />
                   </div>
                   <h3 className="text-3xl font-semibold text-black tracking-tight">
                     {currentMonthPresents}{" "}
@@ -414,7 +447,6 @@ const EmployeeDashboard = () => {
                     <p className="text-sm text-zinc-500 font-medium group-hover:text-black transition-colors">
                       Available Leaves
                     </p>
-                    <Umbrella size={16} className="text-zinc-400" />
                   </div>
                   <h3 className="text-3xl font-semibold text-black tracking-tight">
                     {availableLeaves}{" "}
@@ -431,7 +463,6 @@ const EmployeeDashboard = () => {
                     <p className="text-sm text-zinc-500 font-medium group-hover:text-black transition-colors">
                       Leaves Used
                     </p>
-                    <CalendarDays size={16} className="text-zinc-400" />
                   </div>
                   <h3 className="text-3xl font-semibold text-black tracking-tight">
                     {usedLeaves}
@@ -445,10 +476,6 @@ const EmployeeDashboard = () => {
                     <p className="text-sm text-zinc-500 font-medium group-hover:text-black transition-colors">
                       Pending Requests
                     </p>
-                    <Activity
-                      size={16}
-                      className={`${pendingLeaves > 0 ? "text-amber-500" : "text-zinc-400"}`}
-                    />
                   </div>
                   <h3 className="text-3xl font-semibold text-black tracking-tight">
                     {pendingLeaves}
@@ -462,7 +489,7 @@ const EmployeeDashboard = () => {
                     <h2 className="text-sm font-semibold text-black uppercase tracking-widest">
                       Attendance Records
                     </h2>
-                    <div className="flex bg-zinc-100 p-1 rounded-lg border border-zinc-200 w-fit">
+                    <div className="flex bg-zinc-100 p-1 rounded-md border border-zinc-200 w-fit">
                       {["7 Days", "30 Days", "6 Months", "All Time"].map(
                         (opt) => (
                           <button

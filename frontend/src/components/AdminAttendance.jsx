@@ -109,7 +109,7 @@ const AdminAttendance = () => {
   );
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="mx-auto">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4 border-b border-zinc-200 pb-4">
         <div>
           <h2 className="text-xl font-semibold text-black tracking-tight">
