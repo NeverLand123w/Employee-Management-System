@@ -39,7 +39,7 @@ A web-based HR platform for startups to manage employee onboarding, profiles, at
 
 # API Documentation
 
-**Demo Video** `https://drive.google.com/file/d/1U1yym5DAcTDlaJRbudQp-JTZ5ewcyGel/view?usp=sharing`
+**Demo Video:** [Video](https://drive.google.com/file/d/1U1yym5DAcTDlaJRbudQp-JTZ5ewcyGel/view?usp=sharing)
 
 **Base URL:** `http://localhost:5000/api`
 
