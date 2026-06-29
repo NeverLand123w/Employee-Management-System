@@ -1,6 +1,7 @@
 # Employee Management System (EMS)
 
 **Demo Video**: [Demo walkthrough video](https://drive.google.com/file/d/1bhDfIzDpY1Dw_CzAOt_MzHBeaMu5YqcF/view?usp=sharing)
+
 **Phase 1 Video**: [Demo walkthrough video](https://drive.google.com/file/d/1U1yym5DAcTDlaJRbudQp-JTZ5ewcyGel/view?usp=sharing)
 
 A web-based HR platform for startups to manage employee onboarding, profiles, attendance, leave, and access control through a secure, role-based dashboard.
