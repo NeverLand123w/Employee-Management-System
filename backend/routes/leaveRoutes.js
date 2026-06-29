@@ -3,6 +3,7 @@ const Leave = require("../models/Leave");
 const Employee = require("../models/Employee");
 const Notification = require("../models/Notification");
 const { protect, admin } = require("../middleware/authMiddleware");
+const { sendLeaveStatusEmail } = require("../utils/emailService");
 const router = express.Router();
 
 const TOTAL_LEAVE_ALLOWANCE = 20;
@@ -109,7 +110,7 @@ router.post("/apply", protect, async (req, res) => {
     const admins = await Employee.find({ role: "Admin" });
     const notifications = admins.map((adminUser) => ({
       recipientId: adminUser._id,
-      message: `New ${isHalfDay ? "Half-Day " : ""}${leaveType} request from ${req.user.name}.`,
+      message: `New ${isHalfDay ? "Half-Day " : ""}${leaveType} leave request from ${req.user.name}.`,
     }));
     if (notifications.length > 0) await Notification.insertMany(notifications);
 
@@ -194,6 +195,26 @@ router.put("/:id/status", protect, admin, async (req, res) => {
       recipientId: leave.employeeId,
       message: messageText,
     });
+
+    // Also send an email — non-fatal if it fails
+    try {
+      const employee = await Employee.findById(leave.employeeId).select("email name");
+      if (employee?.email) {
+        const finalStatus = leave.status === "Approved" && req.body.wasCancelDeny ? "Approved" : leave.status;
+        await sendLeaveStatusEmail({
+          to: employee.email,
+          name: employee.name,
+          status: finalStatus,
+          leaveType: leave.leaveType,
+          startDate: leave.startDate,
+          endDate: leave.endDate,
+          message: messageText,
+        });
+      }
+    } catch (emailErr) {
+      console.error("Leave status email failed (non-fatal):", emailErr.message);
+    }
+
     res.status(200).json(leave);
   } catch (error) {
     res.status(500).json({ error: error.message });
