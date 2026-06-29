@@ -4,7 +4,7 @@
 
 **Phase 1 Video**: [Demo walkthrough video](https://drive.google.com/file/d/1U1yym5DAcTDlaJRbudQp-JTZ5ewcyGel/view?usp=sharing)
 
-**Live Demo**: [Employee Management System](https://employee-management-system-6zc8.vercel.app/)
+**Live Deployed**: [Employee Management System](https://employee-management-system-6zc8.vercel.app/)
 (Email Address: mayanknegi15011@gmail.com)
 (Password: Dotwo123$)
 
