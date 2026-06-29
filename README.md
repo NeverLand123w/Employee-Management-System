@@ -34,16 +34,15 @@ A web-based HR platform for startups to manage employee onboarding, profiles, at
 | Backend        | Node.js, Express.js            |
 | Database       | MongoDB (Mongoose)             |
 | Authentication | JWT, Role-Based Access Control |
+| Email          | Nodemailer (Gmail SMTP)        |
 
 ---
 
 # API Documentation
 
-**Demo Video:** [Video](https://drive.google.com/file/d/1U1yym5DAcTDlaJRbudQp-JTZ5ewcyGel/view?usp=sharing)
-
 **Base URL:** `http://localhost:5000/api`
 
-All endpoints (except `/auth/login`) require JWT Bearer token authentication. See [Authentication](#authentication) for the header format.
+All endpoints (except `/auth/login`, `/auth/forgot-password`, `/auth/setup-account/:token`, and `/auth/reset-password/:token`) require JWT Bearer token authentication. See [Authentication](#authentication) for the header format.
 
 ---
 
@@ -54,6 +53,7 @@ All endpoints (except `/auth/login`) require JWT Bearer token authentication. Se
 Authenticates a user and returns a JWT token.
 
 - **Auth required:** No
+- **Rate limited:** 10 requests per 15 minutes per IP
 
 **Request Body**
 
@@ -73,25 +73,127 @@ Authenticates a user and returns a JWT token.
     "id": "64f1a2b3c4d5e6f7a8b9c0d1",
     "name": "John Doe",
     "email": "admin@company.com",
-    "role": "Admin"
+    "role": "Admin",
+    "profileImage": ""
   }
 }
 ```
 
 **Error Responses**
 
-| Status | Message                           | Cause                |
-| ------ | ----------------------------------- | --------------------- |
-| `400`  | `Email and password are required`   | Missing fields        |
-| `400`  | `Invalid credentials`                | Wrong password        |
-| `404`  | `User not found`                     | Email not registered  |
-| `500`  | `{ error: "..." }`                   | Server error          |
+| Status | Message                                                              | Cause                          |
+| ------ | -------------------------------------------------------------------- | ------------------------------ |
+| `400`  | `Email and password are required`                                    | Missing fields                 |
+| `400`  | `Invalid credentials`                                                | Wrong password                 |
+| `403`  | `Account setup incomplete. Please check your email for the setup link.` | Employee added but never set up password |
+| `404`  | `User not found`                                                     | Email not registered           |
+| `429`  | `Too many login attempts. Please try again in 15 minutes.`           | Rate limit exceeded            |
+| `500`  | `{ error: "..." }`                                                   | Server error                   |
+
+---
+
+### `POST /auth/setup-account/:token`
+
+Activates a new employee account by setting their password. Called from the setup link emailed to the employee when they are onboarded.
+
+- **Auth required:** No
+- **URL Param:** `token` — raw setup token from the email link
+
+**Request Body**
+
+```json
+{
+  "password": "newpassword123"
+}
+```
+
+**Success — `200 OK`**
+
+```json
+{
+  "message": "Password set successfully. You can now log in."
+}
+```
+
+**Error Responses**
+
+| Status | Message                                    | Cause                              |
+| ------ | ------------------------------------------ | ---------------------------------- |
+| `400`  | `Password must be at least 6 characters.`  | Password too short                 |
+| `400`  | `Setup link is invalid or has expired.`    | Token not found or expired (24 hr) |
+
+---
+
+### `POST /auth/forgot-password`
+
+Sends a password reset email to the provided address. Always returns a generic success message to prevent email enumeration.
+
+- **Auth required:** No
+- **Rate limited:** 5 requests per hour per IP
+
+**Request Body**
+
+```json
+{
+  "email": "jane@company.com"
+}
+```
+
+**Success — `200 OK`**
+
+```json
+{
+  "message": "If that email exists, a reset link has been sent."
+}
+```
+
+**Error Responses**
+
+| Status | Message                                    | Cause                 |
+| ------ | ------------------------------------------ | --------------------- |
+| `400`  | `Email is required`                        | Missing field         |
+| `429`  | `Too many requests. Please try again later.` | Rate limit exceeded |
+
+---
+
+### `POST /auth/reset-password/:token`
+
+Sets a new password using the token from the reset email. Token expires after 1 hour.
+
+- **Auth required:** No
+- **Rate limited:** 5 requests per hour per IP
+- **URL Param:** `token` — raw reset token from the email link
+
+**Request Body**
+
+```json
+{
+  "password": "newpassword123"
+}
+```
+
+**Success — `200 OK`**
+
+```json
+{
+  "message": "Password updated successfully. You can now log in."
+}
+```
+
+**Error Responses**
+
+| Status | Message                                    | Cause                              |
+| ------ | ------------------------------------------ | ---------------------------------- |
+| `400`  | `Password must be at least 6 characters.`  | Password too short                 |
+| `400`  | `Reset link is invalid or has expired.`    | Token not found or expired (1 hr)  |
 
 ---
 
 ## Employee Endpoints
 
 All employee endpoints require the `protect` middleware. Admin-only routes additionally require `admin`.
+
+---
 
 ### `GET /employees/me`
 
@@ -109,6 +211,7 @@ Returns the profile of the currently logged-in employee.
   "email": "jane@company.com",
   "role": "Employee",
   "department": "Engineering",
+  "profileImage": "",
   "createdAt": "2024-01-15T10:30:00.000Z",
   "updatedAt": "2024-01-15T10:30:00.000Z"
 }
@@ -116,11 +219,80 @@ Returns the profile of the currently logged-in employee.
 
 **Error Responses**
 
-| Status | Message                          | Cause                            |
-| ------ | ----------------------------------- | ---------------------------------- |
-| `401`  | `Not authorized, no token`          | Missing Authorization header       |
-| `401`  | `Not authorized, token failed`      | Invalid or expired token           |
-| `404`  | `Employee not found`                | User deleted after token issue     |
+| Status | Message                        | Cause                          |
+| ------ | ------------------------------ | ------------------------------ |
+| `401`  | `Not authorized, no token`     | Missing Authorization header   |
+| `401`  | `Not authorized, token failed` | Invalid or expired token       |
+| `404`  | `Employee not found`           | User deleted after token issue |
+
+---
+
+### `PUT /employees/me/avatar`
+
+Updates the profile image of the currently logged-in employee. Accepts a base64 encoded image string.
+
+- **Auth required:** Yes
+- **Admin only:** No
+
+**Request Body**
+
+```json
+{
+  "image": "data:image/png;base64,iVBORw0KGgo..."
+}
+```
+
+**Success — `200 OK`**
+
+```json
+{
+  "profileImage": "data:image/png;base64,iVBORw0KGgo..."
+}
+```
+
+**Error Responses**
+
+| Status | Message                        | Cause                    |
+| ------ | ------------------------------ | ------------------------ |
+| `401`  | `Not authorized, no token`     | Missing token            |
+| `401`  | `Not authorized, token failed` | Invalid or expired token |
+| `404`  | `Employee not found`           | Invalid user             |
+
+---
+
+### `PUT /employees/me/change-password`
+
+Allows a logged-in employee to change their own password by verifying their current password first.
+
+- **Auth required:** Yes
+- **Admin only:** No
+
+**Request Body**
+
+```json
+{
+  "currentPassword": "oldpassword123",
+  "newPassword": "newpassword456"
+}
+```
+
+**Success — `200 OK`**
+
+```json
+{
+  "message": "Password changed successfully."
+}
+```
+
+**Error Responses**
+
+| Status | Message                                              | Cause                          |
+| ------ | ---------------------------------------------------- | ------------------------------ |
+| `400`  | `Both current and new password are required.`        | Missing fields                 |
+| `400`  | `New password must be at least 6 characters.`        | Password too short             |
+| `400`  | `Current password is incorrect.`                     | Wrong current password         |
+| `401`  | `Not authorized, no token`                           | Missing token                  |
+| `404`  | `Employee not found`                                 | Invalid user                   |
 
 ---
 
@@ -141,6 +313,7 @@ Returns all employees (passwords excluded).
     "email": "admin@company.com",
     "role": "Admin",
     "department": "Management",
+    "profileImage": "",
     "createdAt": "2024-01-10T08:00:00.000Z",
     "updatedAt": "2024-01-10T08:00:00.000Z"
   }
@@ -149,16 +322,16 @@ Returns all employees (passwords excluded).
 
 **Error Responses**
 
-| Status | Message                       | Cause                   |
-| ------ | -------------------------------- | -------------------------- |
-| `401`  | `Not authorized, no token`       | Missing token               |
-| `403`  | `Not authorized as an Admin`     | Requester is not Admin      |
+| Status | Message                      | Cause                  |
+| ------ | ---------------------------- | ---------------------- |
+| `401`  | `Not authorized, no token`   | Missing token          |
+| `403`  | `Not authorized as an Admin` | Requester is not Admin |
 
 ---
 
 ### `POST /employees`
 
-Creates and onboards a new employee.
+Creates and onboards a new employee. On success, an account setup email is sent to the new employee with a tokenized link to set their password. The employee cannot log in until they complete setup.
 
 - **Auth required:** Yes
 - **Admin only:** Yes
@@ -169,19 +342,19 @@ Creates and onboards a new employee.
 {
   "name": "Alice Johnson",
   "email": "alice@company.com",
-  "password": "securepassword123",
   "role": "Employee",
   "department": "Design"
 }
 ```
 
-| Field        | Type   | Required | Notes                              |
-| ------------ | ------ | -------- | -------------------------------------- |
-| `name`       | String | Yes      |                                       |
-| `email`      | String | Yes      | Must be unique                       |
-| `password`   | String | Yes      | Plain text; hashed before saving     |
-| `role`       | String | No       | `Admin` or `Employee`                |
-| `department` | String | No       | Defaults to `Unassigned`             |
+| Field        | Type   | Required | Notes                    |
+| ------------ | ------ | -------- | ------------------------ |
+| `name`       | String | Yes      |                          |
+| `email`      | String | Yes      | Must be unique           |
+| `role`       | String | No       | `Admin` or `Employee`    |
+| `department` | String | No       | Defaults to `Unassigned` |
+
+> **Note:** No `password` field is sent. The employee sets their own password via the emailed setup link.
 
 **Success — `201 Created`**
 
@@ -192,6 +365,7 @@ Creates and onboards a new employee.
   "email": "alice@company.com",
   "role": "Employee",
   "department": "Design",
+  "profileImage": "",
   "createdAt": "2024-02-01T09:00:00.000Z",
   "updatedAt": "2024-02-01T09:00:00.000Z"
 }
@@ -199,18 +373,18 @@ Creates and onboards a new employee.
 
 **Error Responses**
 
-| Status | Message                                    | Cause                     |
-| ------ | --------------------------------------------- | --------------------------- |
-| `400`  | `Name, email, and password are required`      | Missing required fields     |
-| `400`  | `Email already in use`                         | Duplicate email             |
-| `401`  | `Not authorized, no token`                     | Missing token                |
-| `403`  | `Not authorized as an Admin`                   | Requester is not Admin       |
+| Status | Message                          | Cause                   |
+| ------ | -------------------------------- | ----------------------- |
+| `400`  | `Name and email are required`    | Missing required fields |
+| `400`  | `Email already in use`           | Duplicate email         |
+| `401`  | `Not authorized, no token`       | Missing token           |
+| `403`  | `Not authorized as an Admin`     | Requester is not Admin  |
 
 ---
 
 ### `PUT /employees/:id`
 
-Updates an existing employee's profile. Leave `password` blank to keep the current one.
+Updates an existing employee's profile.
 
 - **Auth required:** Yes
 - **Admin only:** Yes
@@ -223,18 +397,16 @@ Updates an existing employee's profile. Leave `password` blank to keep the curre
   "name": "Alice Johnson",
   "email": "alice.new@company.com",
   "role": "Employee",
-  "department": "Product",
-  "password": ""
+  "department": "Product"
 }
 ```
 
-| Field        | Type   | Required | Notes                                       |
-| ------------ | ------ | -------- | ----------------------------------------------- |
-| `name`       | String | Yes      |                                                |
-| `email`      | String | Yes      |                                                |
-| `role`       | String | No       | `Admin` or `Employee`                         |
-| `department` | String | No       |                                                |
-| `password`   | String | No       | If blank or omitted, password is unchanged    |
+| Field        | Type   | Required | Notes                 |
+| ------------ | ------ | -------- | --------------------- |
+| `name`       | String | Yes      |                       |
+| `email`      | String | Yes      |                       |
+| `role`       | String | No       | `Admin` or `Employee` |
+| `department` | String | No       |                       |
 
 **Success — `200 OK`**
 
@@ -252,20 +424,20 @@ Updates an existing employee's profile. Leave `password` blank to keep the curre
 
 **Security Rules**
 
-| Scenario                                          | Response                                                                                                  |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Admin tries to demote themselves to `Employee`        | `403` — `Security Action Blocked: You cannot demote yourself from Admin status.`                          |
-| Admin tries to edit another Admin's account           | `403` — `Security Action Blocked: You do not have clearance to modify another Administrator's account.`  |
+| Scenario                                       | Response                                                                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Admin tries to demote themselves to `Employee` | `403` — `Security Action Blocked: You cannot demote yourself from Admin status.`                        |
+| Admin tries to edit another Admin's account    | `403` — `Security Action Blocked: You do not have clearance to modify another Administrator's account.` |
 
 **Error Responses**
 
-| Status | Message                              | Cause                     |
-| ------ | --------------------------------------- | --------------------------- |
-| `400`  | `Name and email are required`           | Missing required fields      |
-| `401`  | `Not authorized, no token`              | Missing token                 |
-| `403`  | `Not authorized as an Admin`            | Requester is not Admin        |
-| `403`  | Security Action Blocked (see above)     | Admin security violation      |
-| `404`  | `Employee not found`                    | Invalid ID                     |
+| Status | Message                             | Cause                    |
+| ------ | ----------------------------------- | ------------------------ |
+| `400`  | `Name and email are required`       | Missing required fields  |
+| `401`  | `Not authorized, no token`          | Missing token            |
+| `403`  | `Not authorized as an Admin`        | Requester is not Admin   |
+| `403`  | Security Action Blocked (see above) | Admin security violation |
+| `404`  | `Employee not found`                | Invalid ID               |
 
 ---
 
@@ -287,19 +459,19 @@ Permanently deletes an employee record.
 
 **Security Rules**
 
-| Scenario                                  | Response                                                                                       |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Admin tries to delete their own account        | `403` — `Security Action Blocked: You cannot delete your own admin account.`                       |
-| Admin tries to delete another Admin            | `403` — `Security Action Blocked: You do not have clearance to delete another Administrator.`      |
+| Scenario                                | Response                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Admin tries to delete their own account | `403` — `Security Action Blocked: You cannot delete your own admin account.`                     |
+| Admin tries to delete another Admin     | `403` — `Security Action Blocked: You do not have clearance to delete another Administrator.`    |
 
 **Error Responses**
 
-| Status | Message                              | Cause                     |
-| ------ | --------------------------------------- | --------------------------- |
-| `401`  | `Not authorized, no token`              | Missing token                 |
-| `403`  | `Not authorized as an Admin`            | Requester is not Admin        |
-| `403`  | Security Action Blocked (see above)     | Admin security violation      |
-| `404`  | `Employee not found`                    | Invalid ID                     |
+| Status | Message                             | Cause                    |
+| ------ | ----------------------------------- | ------------------------ |
+| `401`  | `Not authorized, no token`          | Missing token            |
+| `403`  | `Not authorized as an Admin`        | Requester is not Admin   |
+| `403`  | Security Action Blocked (see above) | Admin security violation |
+| `404`  | `Employee not found`                | Invalid ID               |
 
 ---
 
@@ -340,11 +512,11 @@ Marks attendance for the currently logged-in employee. The first call of the day
 
 **Error Responses**
 
-| Status | Message                                      | Cause                        |
-| ------ | ------------------------------------------------ | ------------------------------- |
-| `400`  | `You have already checked out for today.`         | Third call on the same day        |
-| `401`  | `Not authorized, no token`                         | Missing Authorization header       |
-| `401`  | `Not authorized, token failed`                     | Invalid or expired token            |
+| Status | Message                                   | Cause                      |
+| ------ | ----------------------------------------- | -------------------------- |
+| `400`  | `You have already checked out for today.` | Third call on the same day |
+| `401`  | `Not authorized, no token`                | Missing token              |
+| `401`  | `Not authorized, token failed`            | Invalid or expired token   |
 
 ---
 
@@ -372,10 +544,10 @@ Returns the last 90 attendance records for the currently logged-in employee, sor
 
 **Error Responses**
 
-| Status | Message                          | Cause                  |
-| ------ | ------------------------------------- | -------------------------- |
-| `401`  | `Not authorized, no token`            | Missing token                |
-| `401`  | `Not authorized, token failed`        | Invalid or expired token      |
+| Status | Message                        | Cause                    |
+| ------ | ------------------------------ | ------------------------ |
+| `401`  | `Not authorized, no token`     | Missing token            |
+| `401`  | `Not authorized, token failed` | Invalid or expired token |
 
 ---
 
@@ -389,11 +561,11 @@ Returns a paginated list of all employee attendance records. Supports optional d
 **Query Parameters**
 
 | Parameter   | Type   | Required | Default | Notes                                                |
-| ----------- | ------ | -------- | ------- | --------------------------------------------------- |
+| ----------- | ------ | -------- | ------- | ---------------------------------------------------- |
 | `page`      | Number | No       | `1`     | Page number                                          |
 | `limit`     | Number | No       | `25`    | Records per page                                     |
-| `startDate` | String | No       | —       | ISO date string. Must be paired with `endDate`        |
-| `endDate`   | String | No       | —       | ISO date string. End-of-day time applied server-side  |
+| `startDate` | String | No       | —       | ISO date string. Must be paired with `endDate`       |
+| `endDate`   | String | No       | —       | ISO date string. End-of-day time applied server-side |
 
 **Example Request**
 
@@ -427,10 +599,10 @@ GET /attendance?page=1&limit=25&startDate=2024-03-01&endDate=2024-03-31
 
 **Error Responses**
 
-| Status | Message                       | Cause                   |
-| ------ | -------------------------------- | --------------------------- |
-| `401`  | `Not authorized, no token`       | Missing token                 |
-| `403`  | `Not authorized as an Admin`     | Requester is not Admin        |
+| Status | Message                      | Cause                  |
+| ------ | ---------------------------- | ---------------------- |
+| `401`  | `Not authorized, no token`   | Missing token          |
+| `403`  | `Not authorized as an Admin` | Requester is not Admin |
 
 ---
 
@@ -455,11 +627,11 @@ Submits a new leave request for the currently logged-in employee. On success, a 
 ```
 
 | Field       | Type   | Required | Notes                            |
-| ----------- | ------ | -------- | ----------------------------------- |
-| `leaveType` | String | Yes      | Enum: `Sick`, `Casual`, `Annual`     |
-| `startDate` | Date   | Yes      | ISO date string                      |
-| `endDate`   | Date   | Yes      | ISO date string                      |
-| `reason`    | String | Yes      |                                      |
+| ----------- | ------ | -------- | -------------------------------- |
+| `leaveType` | String | Yes      | Enum: `Sick`, `Casual`, `Annual` |
+| `startDate` | Date   | Yes      | ISO date string                  |
+| `endDate`   | Date   | Yes      | ISO date string                  |
+| `reason`    | String | Yes      |                                  |
 
 **Success — `201 Created`**
 
@@ -479,11 +651,11 @@ Submits a new leave request for the currently logged-in employee. On success, a 
 
 **Error Responses**
 
-| Status | Message                          | Cause                  |
-| ------ | ------------------------------------- | -------------------------- |
-| `400`  | `All fields are required`             | Any field is missing          |
-| `401`  | `Not authorized, no token`            | Missing token                  |
-| `401`  | `Not authorized, token failed`        | Invalid or expired token        |
+| Status | Message                        | Cause                    |
+| ------ | ------------------------------ | ------------------------ |
+| `400`  | `All fields are required`      | Any field is missing     |
+| `401`  | `Not authorized, no token`     | Missing token            |
+| `401`  | `Not authorized, token failed` | Invalid or expired token |
 
 ---
 
@@ -514,16 +686,16 @@ Returns all leave requests submitted by the currently logged-in employee, sorted
 
 **Error Responses**
 
-| Status | Message                          | Cause                  |
-| ------ | ------------------------------------- | -------------------------- |
-| `401`  | `Not authorized, no token`            | Missing token                  |
-| `401`  | `Not authorized, token failed`        | Invalid or expired token        |
+| Status | Message                        | Cause                    |
+| ------ | ------------------------------ | ------------------------ |
+| `401`  | `Not authorized, no token`     | Missing token            |
+| `401`  | `Not authorized, token failed` | Invalid or expired token |
 
 ---
 
 ### `GET /leaves`
 
-Returns all leave requests across all employees, with employee details populated. Sorted newest first.
+Returns all leave requests across all employees with employee details populated. Sorted newest first.
 
 - **Auth required:** Yes
 - **Admin only:** Yes
@@ -553,16 +725,16 @@ Returns all leave requests across all employees, with employee details populated
 
 **Error Responses**
 
-| Status | Message                       | Cause                   |
-| ------ | -------------------------------- | --------------------------- |
-| `401`  | `Not authorized, no token`       | Missing token                 |
-| `403`  | `Not authorized as an Admin`     | Requester is not Admin        |
+| Status | Message                      | Cause                  |
+| ------ | ---------------------------- | ---------------------- |
+| `401`  | `Not authorized, no token`   | Missing token          |
+| `403`  | `Not authorized as an Admin` | Requester is not Admin |
 
 ---
 
 ### `PUT /leaves/:id/status`
 
-Approves or rejects a leave request. On success, a notification is automatically sent to the employee who submitted the request.
+Approves or rejects a leave request. On success, a notification and an email are automatically sent to the employee who submitted the request.
 
 - **Auth required:** Yes
 - **Admin only:** Yes
@@ -576,9 +748,9 @@ Approves or rejects a leave request. On success, a notification is automatically
 }
 ```
 
-| Field    | Type   | Required | Notes                              |
-| -------- | ------ | -------- | -------------------------------------- |
-| `status` | String | Yes      | Must be `Approved` or `Rejected`       |
+| Field    | Type   | Required | Notes                            |
+| -------- | ------ | -------- | -------------------------------- |
+| `status` | String | Yes      | Must be `Approved` or `Rejected` |
 
 **Success — `200 OK`**
 
@@ -598,12 +770,12 @@ Approves or rejects a leave request. On success, a notification is automatically
 
 **Error Responses**
 
-| Status | Message                       | Cause                                 |
-| ------ | -------------------------------- | ----------------------------------------- |
-| `400`  | `Invalid status parameter`       | Value is not `Approved` or `Rejected`       |
-| `401`  | `Not authorized, no token`       | Missing token                                |
-| `403`  | `Not authorized as an Admin`     | Requester is not Admin                       |
-| `404`  | `Leave record not found`         | No leave exists with the provided `:id`       |
+| Status | Message                      | Cause                                   |
+| ------ | ---------------------------- | --------------------------------------- |
+| `400`  | `Invalid status parameter`   | Value is not `Approved` or `Rejected`   |
+| `401`  | `Not authorized, no token`   | Missing token                           |
+| `403`  | `Not authorized as an Admin` | Requester is not Admin                  |
+| `404`  | `Leave record not found`     | No leave exists with the provided `:id` |
 
 ---
 
@@ -633,10 +805,10 @@ Returns the latest 20 notifications for the currently logged-in user, sorted new
 
 **Error Responses**
 
-| Status | Message                          | Cause                  |
-| ------ | ------------------------------------- | -------------------------- |
-| `401`  | `Not authorized, no token`            | Missing token                  |
-| `401`  | `Not authorized, token failed`        | Invalid or expired token        |
+| Status | Message                        | Cause                    |
+| ------ | ------------------------------ | ------------------------ |
+| `401`  | `Not authorized, no token`     | Missing token            |
+| `401`  | `Not authorized, token failed` | Invalid or expired token |
 
 ---
 
@@ -657,10 +829,10 @@ Marks all unread notifications as read for the currently logged-in user.
 
 **Error Responses**
 
-| Status | Message                          | Cause                  |
-| ------ | ------------------------------------- | -------------------------- |
-| `401`  | `Not authorized, no token`            | Missing token                  |
-| `401`  | `Not authorized, token failed`        | Invalid or expired token        |
+| Status | Message                        | Cause                    |
+| ------ | ------------------------------ | ------------------------ |
+| `401`  | `Not authorized, no token`     | Missing token            |
+| `401`  | `Not authorized, token failed` | Invalid or expired token |
 
 ---
 
@@ -682,10 +854,10 @@ Marks a single notification as read.
 
 **Error Responses**
 
-| Status | Message                          | Cause                  |
-| ------ | ------------------------------------- | -------------------------- |
-| `401`  | `Not authorized, no token`            | Missing token                  |
-| `401`  | `Not authorized, token failed`        | Invalid or expired token        |
+| Status | Message                        | Cause                    |
+| ------ | ------------------------------ | ------------------------ |
+| `401`  | `Not authorized, no token`     | Missing token            |
+| `401`  | `Not authorized, token failed` | Invalid or expired token |
 
 ---
 
@@ -711,11 +883,15 @@ ems/
 │   │   ├── attendanceRoutes.js
 │   │   ├── leaveRoutes.js
 │   │   └── notificationRoutes.js
+│   ├── utils/
+│   │   └── emailService.js
 │   └── server.js
 └── frontend/
     └── src/
         ├── pages/
         │   ├── Login.jsx
+        │   ├── SetupAccount.jsx
+        │   ├── ResetPassword.jsx
         │   ├── AdminDashboard.jsx
         │   └── EmployeeDashboard.jsx
         ├── components/
@@ -726,6 +902,8 @@ ems/
         │   ├── EmployeeLeave.jsx
         │   ├── NotificationBell.jsx
         │   └── Modals.jsx
+        ├── hooks/
+        │   └── useAuthFetch.js
         ├── App.jsx
         └── main.jsx
 ```
@@ -741,7 +919,11 @@ PORT=5000
 MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret_key
 CLIENT_URL=http://localhost:5173
+EMAIL_USER=your_gmail_address
+EMAIL_PASS=your_gmail_app_password
 ```
+
+> `EMAIL_USER` and `EMAIL_PASS` are required for the account setup and password reset email flows. Use a [Gmail App Password](https://support.google.com/accounts/answer/185833) — not your regular Gmail password.
 
 **`frontend/.env`**
 
@@ -777,15 +959,20 @@ Backend runs on `http://localhost:5000`, frontend on `http://localhost:5173`.
 
 ### Employee
 
-| Field        | Type   | Required | Notes                                          |
-| ------------ | ------ | -------- | ------------------------------------------------ |
-| `name`       | String | Yes      |                                                  |
-| `email`      | String | Yes      | Must be unique                                  |
-| `password`   | String | Yes      | Stored as bcrypt hash                           |
-| `role`       | String | No       | Enum: `Admin`, `Employee`. Default: `Employee`  |
-| `department` | String | No       | Default: `Unassigned`                           |
-| `createdAt`  | Date   | Auto     | Mongoose timestamp                              |
-| `updatedAt`  | Date   | Auto     | Mongoose timestamp                              |
+| Field                  | Type     | Required | Notes                                           |
+| ---------------------- | -------- | -------- | ----------------------------------------------- |
+| `name`                 | String   | Yes      |                                                 |
+| `email`                | String   | Yes      | Must be unique                                  |
+| `password`             | String   | No       | Stored as bcrypt hash. `null` until account setup is complete |
+| `role`                 | String   | No       | Enum: `Admin`, `Employee`. Default: `Employee`  |
+| `department`           | String   | No       | Default: `Unassigned`                           |
+| `profileImage`         | String   | No       | Base64 encoded image string. Default: `""`      |
+| `passwordResetToken`   | String   | No       | SHA-256 hashed token. Cleared after use         |
+| `passwordResetExpires` | Date     | No       | Expiry for reset token (1 hour)                 |
+| `accountSetupToken`    | String   | No       | SHA-256 hashed token. Cleared after use         |
+| `accountSetupExpires`  | Date     | No       | Expiry for setup token (24 hours)               |
+| `createdAt`            | Date     | Auto     | Mongoose timestamp                              |
+| `updatedAt`            | Date     | Auto     | Mongoose timestamp                              |
 
 ### Department
 
@@ -816,25 +1003,25 @@ Backend runs on `http://localhost:5000`, frontend on `http://localhost:5173`.
 ### Leave
 
 | Field        | Type     | Required | Notes                                                        |
-| ------------ | -------- | -------- | -------------------------------------------------------------- |
-| `employeeId` | ObjectId | Yes      | Ref: `Employee`                                                |
-| `leaveType`  | String   | Yes      | Enum: `Sick`, `Casual`, `Annual`                               |
-| `startDate`  | Date     | Yes      |                                                                |
-| `endDate`    | Date     | Yes      |                                                                |
-| `reason`     | String   | Yes      |                                                                |
-| `status`     | String   | Auto     | Enum: `Pending`, `Approved`, `Rejected`. Default: `Pending`   |
-| `createdAt`  | Date     | Auto     | Mongoose timestamp                                             |
-| `updatedAt`  | Date     | Auto     | Mongoose timestamp                                             |
+| ------------ | -------- | -------- | ------------------------------------------------------------ |
+| `employeeId` | ObjectId | Yes      | Ref: `Employee`                                              |
+| `leaveType`  | String   | Yes      | Enum: `Sick`, `Casual`, `Annual`                             |
+| `startDate`  | Date     | Yes      |                                                              |
+| `endDate`    | Date     | Yes      |                                                              |
+| `reason`     | String   | Yes      |                                                              |
+| `status`     | String   | Auto     | Enum: `Pending`, `Approved`, `Rejected`. Default: `Pending`  |
+| `createdAt`  | Date     | Auto     | Mongoose timestamp                                           |
+| `updatedAt`  | Date     | Auto     | Mongoose timestamp                                           |
 
 ### Notification
 
-| Field         | Type     | Required | Notes               |
-| ------------- | -------- | -------- | ------------------- |
-| `recipientId` | ObjectId | Yes      | Ref: `Employee`     |
-| `message`     | String   | Yes      |                     |
-| `isRead`      | Boolean  | Auto     | Default: `false`    |
-| `createdAt`   | Date     | Auto     | Mongoose timestamp  |
-| `updatedAt`   | Date     | Auto     | Mongoose timestamp  |
+| Field         | Type     | Required | Notes              |
+| ------------- | -------- | -------- | ------------------ |
+| `recipientId` | ObjectId | Yes      | Ref: `Employee`    |
+| `message`     | String   | Yes      |                    |
+| `isRead`      | Boolean  | Auto     | Default: `false`   |
+| `createdAt`   | Date     | Auto     | Mongoose timestamp |
+| `updatedAt`   | Date     | Auto     | Mongoose timestamp |
 
 ---
 
@@ -853,15 +1040,41 @@ Two middleware guards are applied per route:
 - `protect` — verifies the JWT and attaches the user to `req.user`
 - `admin` — checks that `req.user.role === 'Admin'`
 
+### `useAuthFetch` Hook
+
+The frontend uses a custom `useAuthFetch` hook (`src/hooks/useAuthFetch.js`) that wraps the native `fetch` API. It automatically attaches the JWT token to every request and handles `401` responses globally — clearing local storage, setting a `sessionExpired` flag in session storage, and redirecting the user to the login page. All authenticated API calls in the dashboards use this hook instead of calling `fetch` directly.
+
+### Account Setup Flow
+
+When an admin creates a new employee, no password is set. Instead:
+
+1. A random 32-byte token is generated and SHA-256 hashed before storing in `Employee.accountSetupToken`
+2. An email is sent to the employee with a link to `/setup-account/:rawToken`
+3. The employee visits the link, sets a password, and the token is cleared
+4. The employee can now log in
+
+The setup link expires after **24 hours**.
+
+### Password Reset Flow
+
+1. Employee submits their email to `POST /auth/forgot-password`
+2. A reset token is generated, hashed, and stored in `Employee.passwordResetToken`
+3. An email is sent with a link to `/reset-password/:rawToken`
+4. The employee sets a new password and the token is cleared
+
+The reset link expires after **1 hour**.
+
 ---
 
 ## Frontend Routes & Dashboards
 
-| Path                        | Component           | Access        |
-| --------------------------- | -------------------- | ------------- |
-| `/`                         | `Login`              | Public        |
-| `/admin-dashboard/:slug`    | `AdminDashboard`     | Admin only    |
-| `/employee-dashboard/:slug` | `EmployeeDashboard`  | Employee only |
+| Path                          | Component           | Access        |
+| ----------------------------- | ------------------- | ------------- |
+| `/`                           | `Login`             | Public        |
+| `/setup-account/:token`       | `SetupAccount`      | Public        |
+| `/reset-password/:token`      | `ResetPassword`     | Public        |
+| `/admin-dashboard/:slug`      | `AdminDashboard`    | Admin only    |
+| `/employee-dashboard/:slug`   | `EmployeeDashboard` | Employee only |
 
 The `:slug` is generated after login as `{firstName}-{last8charsOfId}` (e.g., `john-a8b9c0d1`). `ProtectedRoute` enforces role-based redirection — accessing the wrong role's URL redirects to the correct dashboard automatically.
 
@@ -869,23 +1082,23 @@ The `:slug` is generated after login as `{firstName}-{last8charsOfId}` (e.g., `j
 
 Switched via the `?tab=` query parameter.
 
-| Tab key      | Label              | Component               | Description                                                                  |
-| ------------ | ------------------- | ------------------------ | ----------------------------------------------------------------------------- |
-| `overview`   | Overview            | _(inline)_                | Stats cards (total employees, pending leaves) + activity chart                |
-| `directory`  | Employee Directory  | `EmployeeDirectory`      | Add / edit / delete employees                                                  |
-| `attendance` | Time & Attendance   | `AdminAttendance`         | Paginated attendance log with date-range filter and CSV export                |
-| `leaves`     | Leave Requests       | `AdminLeaveManagement`   | Approve / reject leave requests with search, status filter, and CSV export    |
+| Tab key      | Label              | Component              | Description                                                                |
+| ------------ | ------------------ | ---------------------- | -------------------------------------------------------------------------- |
+| `overview`   | Overview           | _(inline)_             | Stats cards (total employees, pending leaves) + activity chart             |
+| `directory`  | Employee Directory | `EmployeeDirectory`    | Add / edit / delete employees                                              |
+| `attendance` | Time & Attendance  | `AdminAttendance`      | Paginated attendance log with date-range filter and CSV export             |
+| `leaves`     | Leave Requests     | `AdminLeaveManagement` | Approve / reject leave requests with search, status filter, and CSV export |
 
 ### Employee Dashboard Tabs
 
 Switched via the `?tab=` query parameter.
 
-| Tab key      | Label             | Component            | Description                                                |
-| ------------ | ------------------ | --------------------- | -------------------------------------------------------------- |
-| `overview`   | Overview            | _(inline)_              | Leave balance donut chart + today's attendance status         |
-| `attendance` | Time & Attendance   | `EmployeeAttendance`    | Clock in / clock out + personal attendance logbook            |
-| `leaves`     | Leave Requests       | `EmployeeLeave`         | Apply for leave + leave history with balance summary cards    |
-| `profile`    | Profile             | _(inline)_              | Read-only view of the employee's own profile                  |
+| Tab key      | Label             | Component            | Description                                             |
+| ------------ | ----------------- | -------------------- | ------------------------------------------------------- |
+| `overview`   | Overview          | _(inline)_           | Leave balance donut chart + today's attendance status   |
+| `attendance` | Time & Attendance | `EmployeeAttendance` | Clock in / clock out + personal attendance logbook      |
+| `leaves`     | Leave Requests    | `EmployeeLeave`      | Apply for leave + leave history with balance summary    |
+| `profile`    | Profile           | _(inline)_           | Read-only view of the employee's own profile            |
 
 ### Key Components
 
@@ -895,9 +1108,9 @@ Switched via the `?tab=` query parameter.
 
 **`EmployeeAttendance`** — Displays today's date and a **Clock In / Clock Out** button that calls `POST /attendance/mark`. Button state changes automatically based on today's record — shows "Clock In" if not yet checked in, "Clock Out" if checked in but not checked out, and "Day Completed" (disabled) once checked out. Below the controls, a full logbook table shows the employee's last 90 records.
 
-**`EmployeeLeave`** — Four summary cards show Total, Used, Pending, and Remaining leave days (calculated from `GET /leaves/me` against a 20-day annual allowance). A **Request Leave** button opens an inline form with Leave Type, Start Date, End Date, and Reason fields. Submitting the form first shows a review modal with a summary of the request before final confirmation. A leave history table below shows all past requests with status badges.
+**`EmployeeLeave`** — Four summary cards show Total, Used, Pending, and Remaining leave days calculated against a 20-day annual allowance. A **Request Leave** button opens an inline form with Leave Type, Start Date, End Date, and Reason fields. Submitting shows a review modal before final confirmation. A leave history table below shows all past requests with status badges.
 
-**`NotificationBell`** — Mounted in the sidebar of both dashboards. Polls `GET /notifications` every **30 seconds** and displays an unread count badge when there are unread notifications. Clicking the bell opens a dropdown panel (max 20 notifications) showing message text and timestamp. Clicking a notification marks it as read via `PUT /notifications/:id`. A **Mark all as read** link calls `PUT /notifications/mark-all`. Clicking a leave-related notification automatically switches the dashboard to the `leaves` tab.
+**`NotificationBell`** — Mounted in the sidebar of both dashboards. Polls `GET /notifications` every **30 seconds** and displays an unread count badge. Clicking the bell opens a dropdown panel (max 20 notifications). Clicking a notification marks it as read via `PUT /notifications/:id`. A **Mark all as read** link calls `PUT /notifications/mark-all`. Clicking a leave-related notification automatically switches the dashboard to the `leaves` tab.
 
 ---
 
@@ -905,22 +1118,22 @@ Switched via the `?tab=` query parameter.
 
 Leave balance is computed entirely on the frontend from the data returned by `GET /leaves/me`. There is no separate balance field stored in the database.
 
-| Value     | Calculation                                 |
+| Value     | Calculation                                   |
 | --------- | --------------------------------------------- |
-| Total     | Fixed constant: **20 days**                    |
-| Used      | Sum of days across all `Approved` leaves       |
-| Pending   | Sum of days across all `Pending` leaves        |
-| Remaining | `Total − Used`                                 |
+| Total     | Fixed constant: **20 days**                   |
+| Used      | Sum of days across all `Approved` leaves      |
+| Pending   | Sum of days across all `Pending` leaves       |
+| Remaining | `Total − Used`                                |
 
 Day count for any leave record: `Math.ceil((endDate - startDate) / 86400000) + 1`
 
-The frontend also validates on submission — if the requested days exceed `Remaining`, the form is blocked with an "Insufficient Balance" alert before any API call is made.
+The frontend validates on submission — if the requested days exceed `Remaining`, the form is blocked with an insufficient balance error before any API call is made.
 
 ---
 
 ## Notification Flow
 
-Two events automatically create notifications:
+Two events automatically create in-app notifications. Leave approval/rejection also sends an email via `emailService.js`.
 
 **1. Employee applies for leave**
 
@@ -931,29 +1144,30 @@ Two events automatically create notifications:
 **2. Admin approves or rejects a leave**
 
 - Trigger: `PUT /leaves/:id/status` succeeds
-- Recipient: The employee who submitted the leave request (`leave.employeeId`)
-- Message: `Your leave request starting <startDate> was <Approved|Rejected>.`
+- Recipient: The employee who submitted the leave request
+- In-app message: `Your leave request starting <startDate> was <Approved|Rejected>.`
+- Email: Styled HTML email with leave type, date range, and status sent via Nodemailer
 
 ---
 
 ## Role-Based Access Control
 
-| Action                               | Admin | Employee |
-| -------------------------------------- | ----- | -------- |
-| Login                                  | ✅    | ✅       |
-| View own profile                       | ✅    | ✅       |
-| View all employees                     | ✅    | ❌       |
-| Add / edit / delete employee           | ✅    | ❌       |
-| Clock in / clock out                   | ✅    | ✅       |
-| View own attendance history            | ✅    | ✅       |
-| View all attendance records (admin)    | ✅    | ❌       |
-| Export attendance report (CSV)         | ✅    | ❌       |
-| Apply for leave                        | ✅    | ✅       |
-| View own leave history                 | ✅    | ✅       |
-| View all leave requests (admin)        | ✅    | ❌       |
-| Approve / reject leave                 | ✅    | ❌       |
-| Export leave report (CSV)              | ✅    | ❌       |
-| Receive notifications                  | ✅    | ✅       |
-
----
-
+| Action                              | Admin | Employee |
+| ----------------------------------- | ----- | -------- |
+| Login                               | ✅    | ✅       |
+| View own profile                    | ✅    | ✅       |
+| Update own avatar                   | ✅    | ✅       |
+| Change own password                 | ✅    | ✅       |
+| Forgot / reset password             | ✅    | ✅       |
+| View all employees                  | ✅    | ❌       |
+| Add / edit / delete employee        | ✅    | ❌       |
+| Clock in / clock out                | ✅    | ✅       |
+| View own attendance history         | ✅    | ✅       |
+| View all attendance records         | ✅    | ❌       |
+| Export attendance report (CSV)      | ✅    | ❌       |
+| Apply for leave                     | ✅    | ✅       |
+| View own leave history              | ✅    | ✅       |
+| View all leave requests             | ✅    | ❌       |
+| Approve / reject leave              | ✅    | ❌       |
+| Export leave report (CSV)           | ✅    | ❌       |
+| Receive notifications               | ✅    | ✅       |
