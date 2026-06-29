@@ -99,7 +99,7 @@ const NotificationBell = ({ onNotificationClick }) => {
             </button>
 
             {isOpen && (
-                <div className="absolute left-full bottom-0 ml-3 w-80 bg-white rounded-lg shadow-xl border border-zinc-200 z-[60] overflow-hidden animate-in fade-in slide-in-from-left-2 duration-200">
+                <div className="absolute left-full bottom-0 ml-3 w-80 bg-white rounded-lg shadow-xl border border-zinc-200 z-[60] overflow-hidden animate-in fade-in slide-in-from-left-2 duration-200 max-[611px]:left-[-1em] max-[611px]:bottom-[3em] max-[320px]:left-[-1.8em]">
                     <div className="flex justify-between items-center px-4 py-3 border-b border-zinc-100 bg-zinc-50">
                         <h3 className="text-sm font-semibold text-black tracking-tight flex items-center gap-2">
                             <BellRing size={14} className="text-zinc-500"/> Activity

@@ -9,6 +9,8 @@ import {
 import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard";
 import EmployeeDashboard from "./pages/EmployeeDashboard";
+import ResetPassword from "./pages/ResetPassword";
+import SetupAccount from "./pages/SetupAccount";
 
 const ProtectedRoute = ({ children, allowedRole }) => {
   const { slug } = useParams();
@@ -60,6 +62,9 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Login />} />
+
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
+        <Route path="/setup-account/:token" element={<SetupAccount />} />
 
         <Route
           path="/admin-dashboard/:slug"

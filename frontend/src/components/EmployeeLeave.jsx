@@ -16,6 +16,7 @@ const TOTAL_LEAVE_ALLOWANCE = 20;
 
 const EmployeeLeave = () => {
   const [leaves, setLeaves] = useState([]);
+  const [isFetching, setIsFetching] = useState(true);
 
   const draftData =
     JSON.parse(sessionStorage.getItem("employeeLeaveFormDraft")) || {};
@@ -47,6 +48,7 @@ const EmployeeLeave = () => {
   const todayString = new Date().toISOString().split("T")[0];
 
   const fetchLeaves = async () => {
+    setIsFetching(true);
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/leaves/me`, {
@@ -58,6 +60,8 @@ const EmployeeLeave = () => {
       }
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsFetching(false);
     }
   };
 
@@ -108,7 +112,6 @@ const EmployeeLeave = () => {
     let count = 0;
     let curDate = new Date(start);
     const endDate = new Date(end);
-
     while (curDate <= endDate) {
       const dayOfWeek = curDate.getDay();
       if (dayOfWeek !== 0 && dayOfWeek !== 6) count++;
@@ -155,9 +158,7 @@ const EmployeeLeave = () => {
   const handleHalfDayChange = (e) => {
     const isChecked = e.target.checked;
     setIsHalfDay(isChecked);
-    if (isChecked && startDate) {
-      setEndDate(startDate);
-    }
+    if (isChecked && startDate) setEndDate(startDate);
   };
 
   const handleReviewRequest = (e) => {
@@ -414,10 +415,7 @@ const EmployeeLeave = () => {
 
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-black tracking-tight">
-            Leave Management
-          </h2>
-          <p className="text-sm text-zinc-500">
+          <p className="text-xl text-black">
             Request time off and track your balances.
           </p>
         </div>
@@ -439,39 +437,62 @@ const EmployeeLeave = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white p-5 rounded-md border border-zinc-200 flex flex-col justify-between">
-          <div className="flex justify-between items-center mb-2">
-            <p className="text-sm text-zinc-500 font-medium">Total Allowance</p>
-            <Umbrella size={16} className="text-zinc-400" />
-          </div>
-          <h3 className="text-2xl font-semibold text-black">
-            {leaveBalances.total}
-          </h3>
+          {isFetching ? (
+            <div className="animate-pulse h-12 bg-zinc-200 rounded-md"></div>
+          ) : (
+            <>
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-sm text-zinc-500 font-medium">
+                  Total Allowance
+                </p>
+              </div>
+              <h3 className="text-2xl font-semibold text-black">
+                {leaveBalances.total}
+              </h3>
+            </>
+          )}
         </div>
         <div className="bg-white p-5 rounded-md border border-zinc-200 flex flex-col justify-between">
-          <div className="flex justify-between items-center mb-2">
-            <p className="text-sm text-zinc-500 font-medium">Days Used</p>
-            <CheckCircle2 size={16} className="text-zinc-400" />
-          </div>
-          <h3 className="text-2xl font-semibold text-black">
-            {leaveBalances.used}
-          </h3>
+          {isFetching ? (
+            <div className="animate-pulse h-12 bg-zinc-200 rounded-md"></div>
+          ) : (
+            <>
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-sm text-zinc-500 font-medium">Days Used</p>
+              </div>
+              <h3 className="text-2xl font-semibold text-black">
+                {leaveBalances.used}
+              </h3>
+            </>
+          )}
         </div>
         <div className="bg-white p-5 rounded-md border border-zinc-200 flex flex-col justify-between">
-          <div className="flex justify-between items-center mb-2">
-            <p className="text-sm text-zinc-500 font-medium">Pending</p>
-            <Activity size={16} className="text-yellow-500" />
-          </div>
-          <h3 className="text-2xl font-semibold text-black">
-            {leaveBalances.pending}
-          </h3>
+          {isFetching ? (
+            <div className="animate-pulse h-12 bg-zinc-200 rounded-md"></div>
+          ) : (
+            <>
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-sm text-zinc-500 font-medium">Pending</p>
+              </div>
+              <h3 className="text-2xl font-semibold text-black">
+                {leaveBalances.pending}
+              </h3>
+            </>
+          )}
         </div>
         <div className="bg-zinc-900 p-5 rounded-md border border-zinc-800 flex flex-col justify-between">
-          <div className="flex justify-between items-center mb-2">
-            <p className="text-sm text-zinc-400 font-medium">Remaining</p>
-          </div>
-          <h3 className="text-2xl font-semibold text-white">
-            {leaveBalances.remaining}
-          </h3>
+          {isFetching ? (
+            <div className="animate-pulse h-12 bg-zinc-800 rounded-md"></div>
+          ) : (
+            <>
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-sm text-zinc-400 font-medium">Remaining</p>
+              </div>
+              <h3 className="text-2xl font-semibold text-white">
+                {leaveBalances.remaining}
+              </h3>
+            </>
+          )}
         </div>
       </div>
 
@@ -502,7 +523,7 @@ const EmployeeLeave = () => {
               <select
                 value={leaveType}
                 onChange={handleLeaveTypeChange}
-                className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm text-black focus:outline-none focus:border-black"
+                className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm text-black focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
               >
                 <option value="Casual">Casual Leave</option>
                 <option value="Sick">Sick Leave</option>
@@ -522,7 +543,7 @@ const EmployeeLeave = () => {
                   setStartDate(e.target.value);
                   if (isHalfDay) setEndDate(e.target.value);
                 }}
-                className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm text-black focus:outline-none focus:border-black"
+                className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm text-black focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
               />
             </div>
             <div>
@@ -538,7 +559,7 @@ const EmployeeLeave = () => {
                 }
                 onChange={(e) => setEndDate(e.target.value)}
                 disabled={isHalfDay}
-                className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm text-black focus:outline-none focus:border-black disabled:bg-zinc-100 disabled:text-zinc-500"
+                className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm text-black focus:outline-none focus:border-black focus:ring-1 focus:ring-black disabled:bg-zinc-100 disabled:text-zinc-500"
               />
             </div>
             <div className="md:col-span-2">
@@ -551,7 +572,7 @@ const EmployeeLeave = () => {
                 placeholder="Briefly describe the reason for your request..."
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm text-black focus:outline-none focus:border-black resize-none"
+                className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm text-black focus:outline-none focus:border-black focus:ring-1 focus:ring-black resize-none"
               />
             </div>
             <div className="md:col-span-2 mt-2">
@@ -567,7 +588,7 @@ const EmployeeLeave = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-md border border-zinc-200 overflow-hidden">
+      <div className="bg-white rounded-md border border-zinc-200 overflow-auto">
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-zinc-50 border-b border-zinc-200">
             <tr>
@@ -586,89 +607,111 @@ const EmployeeLeave = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200">
-            {leaves.map((leave) => (
-              <tr
-                key={leave._id}
-                className="hover:bg-zinc-50 transition-colors"
-              >
-                <td className="px-6 py-4 font-medium text-black">
-                  {leave.leaveType}{" "}
-                  {leave.isHalfDay && (
-                    <span className="text-xs ml-1 font-medium bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded border border-zinc-200">
-                      Half
-                    </span>
-                  )}
-                  <div className="text-zinc-400 text-xs mt-1 truncate max-w-xs">
-                    {leave.reason}
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-zinc-600">
-                  {formatDate(leave.startDate)}{" "}
-                  {leave.startDate !== leave.endDate &&
-                    `— ${formatDate(leave.endDate)}`}
-                </td>
-                <td className="px-6 py-4 text-zinc-600">
-                  {calculateDays(
-                    leave.startDate,
-                    leave.endDate,
-                    leave.isHalfDay,
-                  )}{" "}
-                  {calculateDays(
-                    leave.startDate,
-                    leave.endDate,
-                    leave.isHalfDay,
-                  ) > 1
-                    ? "days"
-                    : "day"}
-                </td>
-                <td className="px-6 py-4 flex items-center justify-end gap-3">
-                  <span
-                    className={`px-2 py-1 text-xs font-medium rounded-md border ${getStatusStyle(leave.status)}`}
+            {isFetching ? (
+              [...Array(4)].map((_, i) => (
+                <tr key={`skel-${i}`} className="animate-pulse">
+                  <td className="px-6 py-4">
+                    <div className="h-4 bg-zinc-200 rounded w-full mb-2"></div>
+                    <div className="h-3 bg-zinc-100 rounded w-3/4"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-4 bg-zinc-200 rounded w-full"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-4 bg-zinc-200 rounded w-full"></div>
+                  </td>
+                  <td className="px-6 py-4 flex justify-end">
+                    <div className="h-6 w-16 bg-zinc-200 rounded"></div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <>
+                {leaves.map((leave) => (
+                  <tr
+                    key={leave._id}
+                    className="hover:bg-zinc-50 transition-colors"
                   >
-                    {leave.status}
-                  </span>
-                  {leave.status === "Pending" && (
-                    <button
-                      onClick={() =>
-                        setDeleteModal({ isOpen: true, leaveId: leave._id })
-                      }
-                      title="Cancel Pending Request"
-                      className="text-zinc-400 hover:text-red-600 transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                  {leave.status === "Approved" &&
-                    new Date(leave.endDate) >=
-                      new Date(new Date().setHours(0, 0, 0, 0)) && (
-                      <button
-                        onClick={() =>
-                          setCancelReqModal({
-                            isOpen: true,
-                            leaveId: leave._id,
-                          })
-                        }
-                        title="Request Cancellation"
-                        className="text-zinc-400 hover:text-orange-500 transition-colors"
+                    <td className="px-6 py-4 font-medium text-black">
+                      {leave.leaveType}{" "}
+                      {leave.isHalfDay && (
+                        <span className="text-[10px] ml-1 font-semibold bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded border border-zinc-200 uppercase tracking-widest">
+                          Half
+                        </span>
+                      )}
+                      <div className="text-zinc-400 text-xs mt-1 truncate max-w-xs">
+                        {leave.reason}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-zinc-600">
+                      {formatDate(leave.startDate)}{" "}
+                      {leave.startDate !== leave.endDate &&
+                        `— ${formatDate(leave.endDate)}`}
+                    </td>
+                    <td className="px-6 py-4 text-zinc-600">
+                      {calculateDays(
+                        leave.startDate,
+                        leave.endDate,
+                        leave.isHalfDay,
+                      )}{" "}
+                      {calculateDays(
+                        leave.startDate,
+                        leave.endDate,
+                        leave.isHalfDay,
+                      ) > 1
+                        ? "days"
+                        : "day"}
+                    </td>
+                    <td className="px-6 py-4 flex items-center justify-end gap-3">
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded-md border ${getStatusStyle(leave.status)}`}
                       >
-                        <XCircle size={16} />
-                      </button>
-                    )}
-                </td>
-              </tr>
-            ))}
-            {leaves.length === 0 && (
-              <tr>
-                <td
-                  colSpan="4"
-                  className="px-6 py-12 text-center text-zinc-500"
-                >
-                  <div className="flex flex-col items-center justify-center">
-                    <Info size={24} className="mb-2 text-zinc-300" />
-                    <p>No leave requests found.</p>
-                  </div>
-                </td>
-              </tr>
+                        {leave.status}
+                      </span>
+                      {leave.status === "Pending" && (
+                        <button
+                          onClick={() =>
+                            setDeleteModal({ isOpen: true, leaveId: leave._id })
+                          }
+                          title="Cancel Pending Request"
+                          className="text-zinc-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                      {leave.status === "Approved" &&
+                        new Date(leave.endDate) >=
+                          new Date(new Date().setHours(0, 0, 0, 0)) && (
+                          <button
+                            onClick={() =>
+                              setCancelReqModal({
+                                isOpen: true,
+                                leaveId: leave._id,
+                              })
+                            }
+                            title="Request Cancellation"
+                            className="text-zinc-400 hover:text-orange-500 transition-colors"
+                          >
+                            <XCircle size={16} />
+                          </button>
+                        )}
+                    </td>
+                  </tr>
+                ))}
+                {leaves.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan="4"
+                      className="px-6 py-12 text-center text-zinc-500"
+                    >
+                      <div className="flex flex-col items-center justify-center">
+                        <Info size={24} className="mb-2 text-zinc-300" />
+                        <p>No leave requests found.</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             )}
           </tbody>
         </table>

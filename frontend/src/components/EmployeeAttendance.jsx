@@ -8,7 +8,8 @@ const EmployeeAttendance = () => {
   const [records, setRecords] = useState([]);
   const [todayStatus, setTodayStatus] = useState("not_checked_in");
   const [isOnLeave, setIsOnLeave] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingData, setIsFetchingData] = useState(true);
   const [alertModal, setAlertModal] = useState({
     isOpen: false,
     title: "",
@@ -20,7 +21,7 @@ const EmployeeAttendance = () => {
   });
 
   const fetchStatusAndData = async () => {
-    setIsLoading(true);
+    setIsFetchingData(true);
     try {
       const token = localStorage.getItem("token");
       const today = new Date();
@@ -43,7 +44,12 @@ const EmployeeAttendance = () => {
           start.setHours(0, 0, 0, 0);
           const end = new Date(l.endDate);
           end.setHours(23, 59, 59, 999);
-          return l.status === "Approved" && today >= start && today <= end;
+          return (
+            l.status === "Approved" &&
+            !l.isHalfDay &&
+            today >= start &&
+            today <= end
+          );
         });
 
         if (activeLeave) {
@@ -79,7 +85,7 @@ const EmployeeAttendance = () => {
     } catch (error) {
       console.error(error);
     } finally {
-      setIsLoading(false);
+      setIsFetchingData(false);
     }
   };
 
@@ -117,7 +123,7 @@ const EmployeeAttendance = () => {
       setAlertModal({
         isOpen: true,
         title: "Error",
-        message: "Server error occurred.",
+        message: "Server connection failed.",
       });
     } finally {
       setIsLoading(false);
@@ -166,10 +172,7 @@ const EmployeeAttendance = () => {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-black tracking-tight">
-            Time & Attendance
-          </h2>
-          <p className="text-sm text-zinc-500">Record your daily work hours.</p>
+          <p className="text-xl text-black">Record your daily work hours.</p>
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-4 bg-white px-4 py-3 rounded-md border border-zinc-200">
@@ -190,9 +193,11 @@ const EmployeeAttendance = () => {
           ) : (
             <button
               onClick={initiateAttendanceMarking}
-              disabled={isLoading || todayStatus === "completed"}
+              disabled={
+                isLoading || isFetchingData || todayStatus === "completed"
+              }
               className={`w-full sm:w-auto px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                isLoading
+                isLoading || isFetchingData
                   ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
                   : todayStatus === "not_checked_in"
                     ? "bg-black text-white hover:bg-zinc-800"
@@ -238,45 +243,69 @@ const EmployeeAttendance = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 bg-white">
-              {records.map((record) => (
-                <tr
-                  key={record._id}
-                  className="hover:bg-zinc-50 transition-colors"
-                >
-                  <td className="px-6 py-4 font-medium text-black">
-                    {formatDate(record.date)}
-                  </td>
-                  <td className="px-6 py-4 text-zinc-600">
-                    {formatTime(record.checkInTime)}
-                  </td>
-                  <td className="px-6 py-4 text-zinc-600">
-                    {formatTime(record.checkOutTime)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-2 py-1 text-xs font-medium rounded-md border ${
-                        record.status === "Present"
-                          ? "bg-zinc-50 text-black border-zinc-200"
-                          : "bg-zinc-100 text-zinc-600 border-zinc-200"
-                      }`}
+              {isFetchingData ? (
+                [...Array(5)].map((_, i) => (
+                  <tr key={`skel-${i}`} className="animate-pulse">
+                    <td className="px-6 py-4">
+                      <div className="h-4 bg-zinc-200 rounded w-full"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-4 bg-zinc-200 rounded w-full"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-4 bg-zinc-200 rounded w-full"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-6 bg-zinc-200 rounded w-16"></div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <>
+                  {records.map((record) => (
+                    <tr
+                      key={record._id}
+                      className="hover:bg-zinc-50 transition-colors"
                     >
-                      {record.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {records.length === 0 && !isLoading && (
-                <tr>
-                  <td
-                    colSpan="4"
-                    className="px-6 py-12 text-center text-zinc-500"
-                  >
-                    <div className="flex flex-col items-center justify-center">
-                      <AlertCircle size={24} className="mb-2 text-zinc-300" />
-                      <p>No attendance records found.</p>
-                    </div>
-                  </td>
-                </tr>
+                      <td className="px-6 py-4 font-medium text-black">
+                        {formatDate(record.date)}
+                      </td>
+                      <td className="px-6 py-4 text-zinc-600">
+                        {formatTime(record.checkInTime)}
+                      </td>
+                      <td className="px-6 py-4 text-zinc-600">
+                        {formatTime(record.checkOutTime)}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-md border ${
+                            record.status === "Present"
+                              ? "bg-zinc-50 text-black border-zinc-200"
+                              : "bg-zinc-100 text-zinc-600 border-zinc-200"
+                          }`}
+                        >
+                          {record.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {records.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan="4"
+                        className="px-6 py-12 text-center text-zinc-500"
+                      >
+                        <div className="flex flex-col items-center justify-center">
+                          <AlertCircle
+                            size={24}
+                            className="mb-2 text-zinc-300"
+                          />
+                          <p>No attendance records found.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
               )}
             </tbody>
           </table>

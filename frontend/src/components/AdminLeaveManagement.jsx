@@ -3,19 +3,21 @@ import {
   CalendarDays,
   Check,
   X,
-  Search,
   Download,
   Trash2,
   XCircle,
   Edit2,
+  Search,
 } from "lucide-react";
 import { AlertModal, ConfirmModal, PromptModal } from "./Modals";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-const AdminLeaveManagement = ({ searchTerm = "" }) => {
+const AdminLeaveManagement = () => {
   const [leaves, setLeaves] = useState([]);
+  const [isFetching, setIsFetching] = useState(true);
   const [filterStatus, setFilterStatus] = useState("All");
+  const [searchTerm, setSearchTerm] = useState("");
   const [alertModal, setAlertModal] = useState({
     isOpen: false,
     title: "",
@@ -36,6 +38,7 @@ const AdminLeaveManagement = ({ searchTerm = "" }) => {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const fetchLeaves = async () => {
+    setIsFetching(true);
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/leaves`, {
@@ -47,6 +50,8 @@ const AdminLeaveManagement = ({ searchTerm = "" }) => {
       }
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsFetching(false);
     }
   };
 
@@ -194,7 +199,6 @@ const AdminLeaveManagement = ({ searchTerm = "" }) => {
     let count = 0;
     let curDate = new Date(start);
     const endDate = new Date(end);
-
     while (curDate <= endDate) {
       const dayOfWeek = curDate.getDay();
       if (dayOfWeek !== 0 && dayOfWeek !== 6) count++;
@@ -275,7 +279,6 @@ const AdminLeaveManagement = ({ searchTerm = "" }) => {
         message={alertModal.message}
         onClose={() => setAlertModal({ isOpen: false, title: "", message: "" })}
       />
-
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         title={
@@ -311,7 +314,6 @@ const AdminLeaveManagement = ({ searchTerm = "" }) => {
         }
         onConfirm={updateLeaveStatus}
       />
-
       <PromptModal
         isOpen={deleteModal.isOpen}
         title="Delete Record Permanently"
@@ -323,20 +325,19 @@ const AdminLeaveManagement = ({ searchTerm = "" }) => {
 
       <div className="flex flex-col sm:flex-row justify-between sm:items-end mb-6 border-b border-zinc-200 pb-4 gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-black tracking-tight">
-            Leave Reports
-          </h2>
-          <p className="text-sm text-zinc-500">
+          <p className="text-xl text-black">
             Review, modify, and export employee time-off records.
           </p>
         </div>
+
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <button
             onClick={downloadCSV}
-            className="flex items-center gap-2 bg-black text-white px-4 py-1.5 text-sm font-medium rounded-md hover:bg-zinc-800 transition-colors h-[34px]"
+            className="flex w-full items-center justify-center gap-2 bg-black text-white px-4 py-1.5 text-sm font-medium rounded-md hover:bg-zinc-800 transition-colors h-[34px]"
           >
             <Download size={14} /> Export Report
           </button>
+
           <div className="flex bg-zinc-100 p-1 rounded-md border border-zinc-200 h-[34px] items-center">
             {[
               "All",
@@ -469,7 +470,21 @@ const AdminLeaveManagement = ({ searchTerm = "" }) => {
         </div>
       )}
 
-      <div className="bg-white rounded-md border border-zinc-200 overflow-hidden">
+      <div className="relative h-[34px] mb-6 right-0">
+        <Search
+          size={14}
+          className="text-zinc-400 absolute left-3 top-1/2 transform -translate-y-1/2"
+        />
+        <input
+          type="text"
+          placeholder="Search leaves..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="bg-white border border-zinc-300 rounded-md pl-9 pr-3 py-1 text-sm text-black placeholder-zinc-400 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all w-full sm:w-64 h-full"
+        />
+      </div>
+
+      <div className="bg-white rounded-md border border-zinc-200 overflow-auto">
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-zinc-50 border-b border-zinc-200">
             <tr>
@@ -488,129 +503,168 @@ const AdminLeaveManagement = ({ searchTerm = "" }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200">
-            {filteredLeaves.map((leave) => (
-              <tr
-                key={leave._id}
-                className="hover:bg-zinc-50 transition-colors"
-              >
-                <td className="px-6 py-4">
-                  <div className="font-medium text-black">
-                    {leave.employeeId?.name || "Unknown"}
-                  </div>
-                  <div className="text-zinc-500 text-xs">
-                    {leave.employeeId?.department || "N/A"}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="font-medium text-zinc-800 flex gap-2 items-center">
-                    {leave.leaveType}{" "}
-                    {leave.isHalfDay && (
-                      <span className="text-[10px] ml-1 font-semibold bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded border border-zinc-200 uppercase tracking-widest">
-                        Half
-                      </span>
-                    )}{" "}
-                    <button
-                      onClick={() => openEditForm(leave)}
-                      className="text-zinc-300 hover:text-blue-600 transition-colors"
-                      title="Edit details"
-                    >
-                      <Edit2 size={12} />
-                    </button>
-                  </div>
-                  <div
-                    className="text-zinc-500 text-xs mt-0.5 truncate max-w-[250px] whitespace-normal line-clamp-1"
-                    title={leave.reason}
+            {isFetching ? (
+              [...Array(6)].map((_, i) => (
+                <tr key={`skel-${i}`} className="animate-pulse">
+                  <td className="px-6 py-4">
+                    <div className="h-4 bg-zinc-200 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-zinc-100 rounded w-1/2"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-4 bg-zinc-200 rounded w-full"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-4 bg-zinc-200 rounded w-full"></div>
+                  </td>
+                  <td className="px-6 py-4 flex justify-end">
+                    <div className="h-6 w-20 bg-zinc-200 rounded"></div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <>
+                {filteredLeaves.map((leave) => (
+                  <tr
+                    key={leave._id}
+                    className="hover:bg-zinc-50 transition-colors"
                   >
-                    {leave.reason}
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-zinc-600">
-                  <div>
-                    {formatDate(leave.startDate)}{" "}
-                    {leave.startDate !== leave.endDate &&
-                      `— ${formatDate(leave.endDate)}`}
-                  </div>
-                  <div className="text-xs mt-0.5 font-medium">
-                    {calculateDays(
-                      leave.startDate,
-                      leave.endDate,
-                      leave.isHalfDay,
-                    )}{" "}
-                    {calculateDays(
-                      leave.startDate,
-                      leave.endDate,
-                      leave.isHalfDay,
-                    ) > 1
-                      ? "days"
-                      : "day"}
-                  </div>
-                </td>
-                <td className="px-6 py-4 flex flex-col items-end gap-2">
-                  {leave.status === "Pending" ? (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleActionClick(leave._id, "Approved")}
-                        className="flex items-center gap-1 bg-white border border-zinc-200 text-green-700 hover:bg-green-50 hover:border-green-300 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-black">
+                        {leave.employeeId?.name || "Unknown"}
+                      </div>
+                      <div className="text-zinc-500 text-xs">
+                        {leave.employeeId?.department || "N/A"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-zinc-800 flex gap-2 items-center">
+                        {leave.leaveType}{" "}
+                        {leave.isHalfDay && (
+                          <span className="text-[10px] ml-1 font-semibold bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded border border-zinc-200 uppercase tracking-widest">
+                            Half
+                          </span>
+                        )}{" "}
+                        <button
+                          onClick={() => openEditForm(leave)}
+                          className="text-zinc-300 hover:text-blue-600 transition-colors"
+                          title="Edit details"
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                      </div>
+                      <div
+                        className="text-zinc-500 text-xs mt-0.5 truncate max-w-[250px] whitespace-normal line-clamp-1"
+                        title={leave.reason}
                       >
-                        <Check size={14} /> Approve
-                      </button>
-                      <button
-                        onClick={() => handleActionClick(leave._id, "Rejected")}
-                        className="flex items-center gap-1 bg-white border border-zinc-200 text-red-700 hover:bg-red-50 hover:border-red-300 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-                      >
-                        <X size={14} /> Reject
-                      </button>
-                    </div>
-                  ) : leave.status === "Cancel Requested" ? (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() =>
-                          handleActionClick(leave._id, "Cancelled", true)
-                        }
-                        className="flex items-center gap-1 bg-white border border-zinc-200 text-orange-700 hover:bg-orange-50 hover:border-orange-300 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-                      >
-                        <Trash2 size={14} /> Approve Cancel
-                      </button>
-                      <button
-                        onClick={() =>
-                          handleActionClick(leave._id, "Approved", true)
-                        }
-                        className="flex items-center gap-1 bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-                      >
-                        <XCircle size={14} /> Deny
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded-md border ${getStatusStyle(leave.status)}`}
-                      >
-                        {leave.status}
-                      </span>
-                      <button
-                        onClick={() =>
-                          setDeleteModal({ isOpen: true, leaveId: leave._id })
-                        }
-                        title="Permanently Delete Record"
-                        className="text-zinc-300 hover:text-red-600 transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {filteredLeaves.length === 0 && (
-              <tr>
-                <td
-                  colSpan="4"
-                  className="px-6 py-12 text-center text-zinc-500"
-                >
-                  No {filterStatus !== "All" ? filterStatus.toLowerCase() : ""}{" "}
-                  requests found matching your search.
-                </td>
-              </tr>
+                        {leave.reason}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-zinc-600">
+                      <div>
+                        {formatDate(leave.startDate)}{" "}
+                        {leave.startDate !== leave.endDate &&
+                          `— ${formatDate(leave.endDate)}`}
+                      </div>
+                      <div className="text-xs mt-0.5 font-medium">
+                        {calculateDays(
+                          leave.startDate,
+                          leave.endDate,
+                          leave.isHalfDay,
+                        )}{" "}
+                        {calculateDays(
+                          leave.startDate,
+                          leave.endDate,
+                          leave.isHalfDay,
+                        ) > 1
+                          ? "days"
+                          : "day"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 flex flex-col items-end gap-2">
+                      {leave.status === "Pending" ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() =>
+                              handleActionClick(leave._id, "Approved")
+                            }
+                            className="flex items-center gap-1 bg-white border border-zinc-200 text-green-700 hover:bg-green-50 hover:border-green-300 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                          >
+                            <Check size={14} /> Approve
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleActionClick(leave._id, "Rejected")
+                            }
+                            className="flex items-center gap-1 bg-white border border-zinc-200 text-red-700 hover:bg-red-50 hover:border-red-300 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                          >
+                            <X size={14} /> Reject
+                          </button>
+                        </div>
+                      ) : leave.status === "Cancel Requested" ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() =>
+                              handleActionClick(leave._id, "Cancelled", true)
+                            }
+                            className="flex items-center gap-1 bg-white border border-zinc-200 text-orange-700 hover:bg-orange-50 hover:border-orange-300 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                          >
+                            <Trash2 size={14} /> Approve Cancel
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleActionClick(leave._id, "Approved", true)
+                            }
+                            className="flex items-center gap-1 bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                          >
+                            <XCircle size={14} /> Deny
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded-md border ${getStatusStyle(leave.status)}`}
+                          >
+                            {leave.status}
+                          </span>
+                          <button
+                            onClick={() =>
+                              setDeleteModal({
+                                isOpen: true,
+                                leaveId: leave._id,
+                              })
+                            }
+                            title="Permanently Delete Record"
+                            className="text-zinc-300 hover:text-red-600 transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {filteredLeaves.length === 0 && (
+                  <tr>
+                    <td colSpan="4" className="px-6 py-20 text-center">
+                      <div className="flex flex-col items-center justify-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-zinc-100 flex items-center justify-center">
+                          <CalendarDays size={20} className="text-zinc-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-zinc-800 mb-0.5">
+                            {leaves.length === 0 ? "No leave requests yet" : "No matching requests"}
+                          </p>
+                          <p className="text-xs text-zinc-400">
+                            {leaves.length === 0
+                              ? "Leave requests submitted by employees will appear here."
+                              : "Try a different status filter or search term."}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             )}
           </tbody>
         </table>

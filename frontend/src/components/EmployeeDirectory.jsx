@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, ShieldAlert, Search } from "lucide-react";
+import { Plus, Edit2, Trash2, ShieldAlert, Search, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { AlertModal, ConfirmModal, PromptModal } from "./Modals";
 
 const API_URL = import.meta.env.VITE_API_URL;
+const PAGE_SIZE = 10;
 
 const EmployeeDirectory = () => {
   const [employees, setEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isFetching, setIsFetching] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [resendingId, setResendingId] = useState(null);
 
   const draftData =
     JSON.parse(sessionStorage.getItem("employeeFormDraft")) || {};
@@ -18,7 +22,7 @@ const EmployeeDirectory = () => {
 
   const [name, setName] = useState(draftData.name || "");
   const [email, setEmail] = useState(draftData.email || "");
-  const [password, setPassword] = useState(draftData.password || "");
+  const [resetPassword, setResetPassword] = useState(false);
   const [role, setRole] = useState(draftData.role || "Employee");
   const [department, setDepartment] = useState(
     draftData.department || "Engineering",
@@ -47,6 +51,7 @@ const EmployeeDirectory = () => {
   const isEditingSelf = editingId === loggedInUser?.id;
 
   const fetchEmployees = async () => {
+    setIsFetching(true);
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/employees`, {
@@ -58,6 +63,8 @@ const EmployeeDirectory = () => {
       }
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsFetching(false);
     }
   };
 
@@ -71,7 +78,6 @@ const EmployeeDirectory = () => {
       editingId,
       name,
       email,
-      password,
       role,
       department,
       initialFormData,
@@ -82,7 +88,6 @@ const EmployeeDirectory = () => {
     editingId,
     name,
     email,
-    password,
     role,
     department,
     initialFormData,
@@ -93,7 +98,6 @@ const EmployeeDirectory = () => {
     return (
       name !== initialFormData.name ||
       email !== initialFormData.email ||
-      password !== initialFormData.password ||
       role !== initialFormData.role ||
       department !== initialFormData.department
     );
@@ -102,7 +106,7 @@ const EmployeeDirectory = () => {
   const resetForm = () => {
     setName("");
     setEmail("");
-    setPassword("");
+    setResetPassword(false);
     setRole("Employee");
     setDepartment("Engineering");
     setEditingId(null);
@@ -129,14 +133,13 @@ const EmployeeDirectory = () => {
       setInitialFormData({
         name: "",
         email: "",
-        password: "",
         role: "Employee",
         department: "Engineering",
       });
     } else if (actionType === "edit") {
       setName(targetEmp.name);
       setEmail(targetEmp.email);
-      setPassword("");
+      setResetPassword(false);
       setRole(targetEmp.role);
       setDepartment(targetEmp.department);
       setEditingId(targetEmp._id);
@@ -144,7 +147,6 @@ const EmployeeDirectory = () => {
       setInitialFormData({
         name: targetEmp.name,
         email: targetEmp.email,
-        password: "",
         role: targetEmp.role,
         department: targetEmp.department,
       });
@@ -189,6 +191,29 @@ const EmployeeDirectory = () => {
     setDeleteModal({ isOpen: true, targetId: id });
   };
 
+  const handleResendSetup = async (emp) => {
+    setResendingId(emp._id);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/employees/${emp._id}/resend-setup`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setAlertModal({
+        isOpen: true,
+        title: res.ok ? "Setup Link Sent" : "Failed to Resend",
+        message: res.ok
+          ? `A new setup link has been emailed to ${emp.email}. It expires in 24 hours.`
+          : data.message || "Something went wrong.",
+      });
+    } catch {
+      setAlertModal({ isOpen: true, title: "Error", message: "Network error. Please try again." });
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   const handleRoleChange = (e) => {
     const selectedRole = e.target.value;
     setRole(selectedRole);
@@ -209,7 +234,7 @@ const EmployeeDirectory = () => {
       : `${API_URL}/employees`;
     const method = editingId ? "PUT" : "POST";
     const bodyData = { name, email, role, department };
-    if (password) bodyData.password = password;
+    if (resetPassword) bodyData.resetPassword = true;
 
     try {
       const token = localStorage.getItem("token");
@@ -318,9 +343,9 @@ const EmployeeDirectory = () => {
               </span>
               <span className="col-span-2 text-sm text-zinc-500 italic">
                 {!editingId
-                  ? "Temporary password set (hidden)"
-                  : password
-                    ? "New password provided (hidden)"
+                  ? "Setup link will be emailed to the employee"
+                  : resetPassword
+                    ? "New setup link will be emailed to the employee"
                     : "No changes to existing password"}
               </span>
             </span>
@@ -332,34 +357,32 @@ const EmployeeDirectory = () => {
         onConfirm={executeSave}
       />
 
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4 border-b border-zinc-200 pb-4">
         <div>
-          <h2 className="text-xl font-semibold text-black tracking-tight">
-            Employee Directory
-          </h2>
-          <p className="text-sm text-zinc-500">
+          
+          <p className="text-xl text-black">
             Manage your team members and their roles.
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Search
-              size={14}
-              className="text-zinc-400 absolute left-3 top-1/2 transform -translate-y-1/2"
-            />
-            <input
-              type="text"
-              placeholder="Search employees..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-white border border-zinc-300 rounded-md pl-9 pr-3 py-2 text-sm text-black placeholder-zinc-400 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all w-full sm:w-64"
-            />
-          </div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="relative h-[34px] w-full">
+          <Search
+            size={14}
+            className="text-zinc-400 absolute left-3 top-1/2 transform -translate-y-1/2"
+          />
+          <input
+            type="text"
+            placeholder="Search directory..."
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            className="bg-white border border-zinc-300 rounded-md pl-9 pr-3 py-1.5 text-sm text-black placeholder-zinc-400 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all w-full sm:w-64 h-full"
+          />
+        </div>
           <button
             onClick={() =>
               handleActionWithWarning(isFormOpen ? "cancel" : "openNew")
             }
-            className="flex items-center whitespace-nowrap gap-2 bg-black text-white px-4 py-2 text-sm font-medium rounded-md hover:bg-zinc-800 transition-colors"
+            className="flex items-center justify-center whitespace-nowrap gap-2 bg-black text-white px-4 py-2 text-sm font-medium rounded-md hover:bg-zinc-800 transition-colors h-[34px] w-full"
           >
             {isFormOpen ? (
               "Cancel"
@@ -369,8 +392,10 @@ const EmployeeDirectory = () => {
               </>
             )}
           </button>
+          
         </div>
       </div>
+
 
       {isFormOpen && (
         <div className="bg-white p-6 rounded-md border border-zinc-200 mb-8 animate-in fade-in slide-in-from-top-4 duration-200">
@@ -397,18 +422,17 @@ const EmployeeDirectory = () => {
               onChange={(e) => setEmail(e.target.value)}
               className="bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm text-black focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
             />
-            <input
-              type="password"
-              placeholder={
-                editingId
-                  ? "New Password (leave blank to keep current)"
-                  : "Temporary Password"
-              }
-              required={!editingId}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm text-black focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
-            />
+            {editingId && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.checked)}
+                  className="w-4 h-4 rounded border-zinc-300 accent-black cursor-pointer"
+                />
+                <span className="text-sm text-zinc-600">Send password reset link to employee</span>
+              </label>
+            )}
             <div className="flex gap-4">
               <select
                 value={role}
@@ -445,7 +469,7 @@ const EmployeeDirectory = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-md border border-zinc-200 overflow-hidden">
+      <div className="bg-white rounded-md border border-zinc-200 overflow-auto">
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-zinc-50 border-b border-zinc-200">
             <tr>
@@ -464,86 +488,201 @@ const EmployeeDirectory = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200">
-            {employees
-              .filter(
-                (emp) =>
-                  emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  emp.department
-                    .toLowerCase()
-                    .includes(searchTerm.toLowerCase()) ||
-                  emp.role.toLowerCase().includes(searchTerm.toLowerCase()),
-              )
-              .map((emp) => {
-                const isOtherAdmin =
-                  emp.role === "Admin" && emp._id !== loggedInUser?.id;
+            {isFetching ? (
+              [...Array(6)].map((_, i) => (
+                <tr key={`skel-${i}`} className="animate-pulse">
+                  <td className="px-6 py-4">
+                    <div className="h-4 bg-zinc-200 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-zinc-100 rounded w-1/2"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-5 bg-zinc-200 rounded w-16"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-4 bg-zinc-200 rounded w-1/2"></div>
+                  </td>
+                  <td className="px-6 py-4 flex justify-end">
+                    <div className="h-6 w-16 bg-zinc-200 rounded"></div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <>
+                {employees
+                  .filter(
+                    (emp) =>
+                      emp.name
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      emp.email
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      emp.department
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      emp.role.toLowerCase().includes(searchTerm.toLowerCase()),
+                  )
+                  .slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+                  .map((emp) => {
+                    const isOtherAdmin =
+                      emp.role === "Admin" && emp._id !== loggedInUser?.id;
 
-                return (
-                  <tr
-                    key={emp._id}
-                    className="hover:bg-zinc-50 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-black">{emp.name}</div>
-                      <div className="text-zinc-500 text-xs">{emp.email}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded-md ${emp.role === "Admin" ? "bg-zinc-800 text-white" : "bg-zinc-100 text-zinc-600"}`}
+                    return (
+                      <tr
+                        key={emp._id}
+                        className="hover:bg-zinc-50 transition-colors"
                       >
-                        {emp.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-600">
-                      {emp.department}
-                    </td>
-                    <td className="px-6 py-4 flex gap-3 justify-end items-center">
-                      {isOtherAdmin ? (
-                        <div className="flex items-center gap-2 px-2 py-1 bg-zinc-100 rounded text-zinc-400 text-xs font-medium cursor-not-allowed">
-                          <ShieldAlert size={14} /> Protected
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-black">
+                            {emp.name}
+                          </div>
+                          <div className="text-zinc-500 text-xs">
+                            {emp.email}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded-md ${emp.role === "Admin" ? "bg-zinc-800 text-white" : "bg-zinc-100 text-zinc-600"}`}
+                          >
+                            {emp.role}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-zinc-600">
+                          {emp.department}
+                        </td>
+                        <td className="px-6 py-4 flex gap-3 justify-end items-center">
+                          {!emp.password && (
+                            <button
+                              onClick={() => handleResendSetup(emp)}
+                              disabled={resendingId === emp._id}
+                              title="Resend setup link"
+                              className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition-colors disabled:opacity-50"
+                            >
+                              <RefreshCw size={11} className={resendingId === emp._id ? "animate-spin" : ""} />
+                              {resendingId === emp._id ? "Sending…" : "Resend Link"}
+                            </button>
+                          )}
+                          {isOtherAdmin ? (
+                            <div className="flex items-center gap-2 px-2 py-1 bg-zinc-100 rounded text-zinc-400 text-xs font-medium cursor-not-allowed">
+                              <ShieldAlert size={14} /> Protected
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() =>
+                                  handleActionWithWarning("edit", emp)
+                                }
+                                className="text-zinc-400 hover:text-black transition-colors"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteClick(emp._id)}
+                                className={`transition-colors ${emp._id === loggedInUser?.id ? "text-zinc-300 cursor-not-allowed" : "text-zinc-400 hover:text-red-600"}`}
+                                disabled={emp._id === loggedInUser?.id}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                {employees.length === 0 ? (
+                  <tr>
+                    <td colSpan="4" className="px-6 py-20 text-center">
+                      <div className="flex flex-col items-center justify-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-zinc-100 flex items-center justify-center">
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                         </div>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => handleActionWithWarning("edit", emp)}
-                            className="text-zinc-400 hover:text-black transition-colors"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClick(emp._id)}
-                            className={`transition-colors ${emp._id === loggedInUser?.id ? "text-zinc-300 cursor-not-allowed" : "text-zinc-400 hover:text-red-600"}`}
-                            disabled={emp._id === loggedInUser?.id}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </>
-                      )}
+                        <div>
+                          <p className="text-sm font-medium text-zinc-800 mb-0.5">No employees yet</p>
+                          <p className="text-xs text-zinc-400">Add your first employee using the form above.</p>
+                        </div>
+                      </div>
                     </td>
                   </tr>
-                );
-              })}
-            {employees.filter(
-              (emp) =>
-                emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                emp.department
-                  .toLowerCase()
-                  .includes(searchTerm.toLowerCase()) ||
-                emp.role.toLowerCase().includes(searchTerm.toLowerCase()),
-            ).length === 0 && (
-              <tr>
-                <td
-                  colSpan="4"
-                  className="px-6 py-12 text-center text-zinc-500"
-                >
-                  No records found matching your search.
-                </td>
-              </tr>
+                ) : employees.filter(
+                  (emp) =>
+                    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    emp.email
+                      .toLowerCase()
+                      .includes(searchTerm.toLowerCase()) ||
+                    emp.department
+                      .toLowerCase()
+                      .includes(searchTerm.toLowerCase()) ||
+                    emp.role.toLowerCase().includes(searchTerm.toLowerCase()),
+                ).length === 0 && (
+                  <tr>
+                    <td colSpan="4" className="px-6 py-16 text-center">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-300"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                        <p className="text-sm text-zinc-400">No employees match <span className="font-medium text-zinc-600">"{searchTerm}"</span></p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             )}
           </tbody>
         </table>
       </div>
+
+      {(() => {
+        const filtered = employees.filter(
+          (emp) =>
+            emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            emp.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            emp.role.toLowerCase().includes(searchTerm.toLowerCase()),
+        );
+        const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+        if (totalPages <= 1) return null;
+        return (
+          <div className="flex items-center justify-between px-2 pt-4 pb-1">
+            <p className="text-xs text-zinc-400">
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded text-zinc-400 hover:text-black hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                .reduce((acc, p, idx, arr) => {
+                  if (idx > 0 && p - arr[idx - 1] > 1) acc.push("…");
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((item, idx) =>
+                  item === "…" ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-xs text-zinc-400">…</span>
+                  ) : (
+                    <button
+                      key={item}
+                      onClick={() => setCurrentPage(item)}
+                      className={`w-7 h-7 text-xs rounded font-medium transition-colors ${currentPage === item ? "bg-black text-white" : "text-zinc-500 hover:bg-zinc-100"}`}
+                    >
+                      {item}
+                    </button>
+                  ),
+                )}
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded text-zinc-400 hover:text-black hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
